@@ -24,3 +24,25 @@
 (defn cast-as-readport
   [x]
   (if (readport? x) x (constant x)))
+
+(defn future*
+  [f]
+  (let [handlers (atom [])
+        container (atom nil)
+        resolve (fn [value]
+                  (reset! container
+                          (channels/box value))
+                  (doseq [handler @handlers]
+                    ((impl/commit handler) value)))]
+    (f resolve)
+    (reify
+      impl/ReadPort
+      (take! [_ handler]
+        (let [boxed @container]
+          (when (nil? boxed)
+            (swap! handlers conj handler))
+          boxed)))))
+
+(defn future<!
+  [ch]
+  (future* (partial async/take! ch)))
