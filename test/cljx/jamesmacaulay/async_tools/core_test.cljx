@@ -45,9 +45,9 @@
         (is (= [1 1 1]
                [(<! fut) (<! fut) (<! fut)]))))))
 
-(deftest ^:async future<!-test
+(deftest ^:async future<-test
   (block-or-done
     (go
-      (let [fut (tools/future<! (to-chan [1]))]
+      (let [fut (tools/future< (to-chan [1]))]
         (is (= [1 1 1]
                [(<! fut) (<! fut) (<! fut)]))))))

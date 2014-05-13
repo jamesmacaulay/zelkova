@@ -43,6 +43,6 @@
             (swap! handlers conj handler))
           boxed)))))
 
-(defn future<!
+(defn future<
   [ch]
   (future* (partial async/take! ch)))
