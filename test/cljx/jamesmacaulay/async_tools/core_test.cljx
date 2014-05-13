@@ -51,3 +51,31 @@
       (let [fut (tools/future< (to-chan [1]))]
         (is (= [1 1 1]
                [(<! fut) (<! fut) (<! fut)]))))))
+
+(deftest ^:async then<-test
+  (block-or-done
+    (go
+      (let [fut (tools/then< inc (go 1))]
+        (is (= [2 2 2]
+               [(<! fut) (<! fut) (<! fut)]))))))
+
+(deftest ^:async all<-test
+  (block-or-done
+    (go
+      (let [fut (tools/all< [1 (go 2) 3 (go 4)])]
+        (is (= [[1 2 3 4] [1 2 3 4] [1 2 3 4]]
+               [(<! fut) (<! fut) (<! fut)]))))))
+
+(deftest ^:async race<-test
+  (block-or-done
+    (go
+      (let [fut (tools/race< [(go 1) 2])]
+        (is (= [2 2 2]
+               [(<! fut) (<! fut) (<! fut)])))
+      (let [t5 (async/timeout 5)
+            t50 (async/timeout 50)
+            fut (tools/race< [(go (<! t50) 1)
+                              (go (<! t5) 2)])]
+        (is (= [2 2 2]
+               [(<! fut) (<! fut) (<! fut)]))))))
+

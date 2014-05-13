@@ -48,3 +48,22 @@
 (defn future<
   [ch]
   (future* (partial async/take! ch)))
+
+(defn then<
+  [f ch]
+  (future* (fn [cb]
+             (async/take! ch (comp cb f)))))
+
+(defn all<
+  [xs]
+  (future< (async/map list
+                      (map cast-as-readport
+                           xs))))
+
+(defn race<
+  [xs]
+  (let [non-readports (remove readport? xs)]
+    (if (empty? non-readports)
+      (future<
+        (go (first (async/alts! xs))))
+      (->> non-readports first constant))))
