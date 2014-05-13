@@ -15,11 +15,13 @@
   [x]
   (satisfies? impl/ReadPort x))
 
+(defrecord ConstantReadPort [boxed-value]
+  impl/ReadPort
+  (take! [_ _] boxed-value))
+
 (defn constant
   [x]
-  (reify
-    impl/ReadPort
-    (take! [_ _] (channels/box x))))
+  (ConstantReadPort. (channels/box x)))
 
 (defn cast-as-readport
   [x]
