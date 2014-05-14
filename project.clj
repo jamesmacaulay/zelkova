@@ -31,7 +31,7 @@
   :cljsbuild {:test-commands {"phantom" ["phantomjs" :runner "target/testable.js"]
                               "node" ["node" :node-runner "target/testable.js"]}
               :builds [{:id "test"
-                        :source-paths ["target/generated/src/cljs" "target/generated/test/cljs"]
+                        :source-paths ["target/generated/src/clj" "target/generated/src/cljs" "target/generated/test/clj" "target/generated/test/cljs"]
                         :notify-command ["phantomjs" :cljs.test/runner "target/testable.js"]
                         :compiler {:output-to "target/testable.js"
                                    :libs [""]
