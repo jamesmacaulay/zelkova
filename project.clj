@@ -26,7 +26,7 @@
                           :test-paths ["target/generated/test/clj" "target/generated/test/cljs"]}]
              :clj [:dev {:source-paths ["target/generated/src/clj"]
                          :test-paths ["target/generated/test/clj"]}]
-             :cljs [:dev {:dependencies [[org.clojure/clojurescript "0.0-2156"]]}]}
+             :cljs [:dev]}
   :hooks [cljx.hooks]
   :cljsbuild {:test-commands {"phantom" ["phantomjs" :runner "target/testable.js"]
                               "node" ["node" :node-runner "target/testable.js"]}
