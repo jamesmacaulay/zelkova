@@ -2,7 +2,8 @@
   (:require [jamesmacaulay.async-tools.core :as tools]
             [clojure.core.async :as async :refer [go <! <!!]]
             [clojure.tools.namespace.repl :refer [refresh]]
-            [clojure.test]))
+            [clojure.test]
+            [cemerick.austin.repls]))
 
 (defn run-tests
   []
