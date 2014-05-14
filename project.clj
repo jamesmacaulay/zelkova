@@ -12,6 +12,8 @@
             "clj-clean-test" ["do" "clean," "clj-test"]
             "cljs-test" ["with-profile" "cljs" "cljsbuild" "test"]
             "cljs-clean-test" ["do" "clean," "cljs-test"]
+            "cljs-autotest" ["with-profile" "cljs" "cljsbuild" "auto" "test"]
+            "cljs-clean-autotest" ["do" "clean" ["cljs-autotest"]]
             "all-tests" ["do" "clean," "clj-test," "cljs-test"]}
   :profiles {:repl {:dependencies [[org.clojure/tools.namespace "0.2.4"]
                                    [com.cemerick/clojurescript.test "0.3.0"]
@@ -27,7 +29,9 @@
                               [com.cemerick/austin "0.1.4"]]
                     :cljsbuild {:test-commands {"phantom" ["phantomjs" :runner "target/testable.js"]
                                                 "node" ["node" :node-runner "target/testable.js"]}
-                                :builds [{:source-paths ["target/generated/src/cljs" "target/generated/test/cljs"]
+                                :builds [{:id "test"
+                                          :source-paths ["target/generated/src/cljs" "target/generated/test/cljs"]
+                                          :notify-command ["phantomjs" :cljs.test/runner "target/testable.js"]
                                           :compiler {:output-to "target/testable.js"
                                                      :libs [""]
                                                      ; node doesn't like source maps I guess?
