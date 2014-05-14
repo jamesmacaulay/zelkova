@@ -12,11 +12,8 @@
   :jar-exclusions [#"\.cljx"]
   :aliases {"repl" ["with-profile" "repl" "repl"]
             "clj-test" ["with-profile" "clj" "test"]
-            "clj-clean-test" ["do" "clean" ["clj-test"]]
-            "cljs-test" ["do" ["cljx"] ["cljsbuild" "test"]]
-            "cljs-clean-test" ["do" "clean" ["cljs-test"]]
+            "cljs-test" ["do" "cljx" ["cljsbuild" "test"]]
             "cljs-autotest" ["do" "cljx" ["cljsbuild" "auto" "test"]]
-            "cljs-clean-autotest" ["do" "clean" ["cljs-autotest"]]
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.4"]
                                   [org.clojure/tools.nrepl "0.2.3"]
