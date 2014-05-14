@@ -36,16 +36,16 @@
       (is (identical? not-a-channel
                       (<! (tools/cast-as-readport not-a-channel)))))))
 
-(deftest future*-test
+(deftest async-future*-test
   (go
-    (let [fut (tools/future* (fn [resolve]
+    (let [fut (tools/async-future* (fn [resolve]
                                (go (resolve (<! (to-chan [1]))))))]
       (is (= [1 1 1]
              [(<! fut) (<! fut) (<! fut)])))))
 
-(deftest future<-test
+(deftest async-future<-test
   (go
-    (let [fut (tools/future< (to-chan [1]))]
+    (let [fut (tools/async-future< (to-chan [1]))]
       (is (= [1 1 1]
              [(<! fut) (<! fut) (<! fut)])))))
 

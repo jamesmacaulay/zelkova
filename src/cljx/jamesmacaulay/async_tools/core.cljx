@@ -27,7 +27,7 @@
   [x]
   (if (readport? x) x (constant x)))
 
-(defn future*
+(defn async-future*
   [f]
   (let [handlers (atom [])
         container (atom nil)
@@ -45,18 +45,18 @@
             (swap! handlers conj handler))
           boxed)))))
 
-(defn future<
+(defn async-future<
   [ch]
-  (future* (partial async/take! ch)))
+  (async-future* (partial async/take! ch)))
 
 (defn then<
   [f ch]
-  (future* (fn [cb]
+  (async-future* (fn [cb]
              (async/take! ch (comp cb f)))))
 
 (defn all<
   [xs]
-  (future< (async/map list
+  (async-future< (async/map list
                       (map cast-as-readport
                            xs))))
 
@@ -64,6 +64,6 @@
   [xs]
   (let [non-readports (remove readport? xs)]
     (if (empty? non-readports)
-      (future<
+      (async-future<
         (go (first (async/alts! xs))))
       (->> non-readports first constant))))
