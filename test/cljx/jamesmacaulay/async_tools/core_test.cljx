@@ -21,13 +21,13 @@
                                  "another"
                                  {}])))
 
-(deftest constant-test
+(deftest test-constant
   (go
     (let [c (tools/constant 1)]
       (is (= [1 1 1]
              [(<! c) (<! c) (<! c)])))))
 
-(deftest cast-as-readport-test
+(deftest test-cast-as-readport
   (go
     (let [channel (chan)
           not-a-channel {}]
@@ -36,32 +36,32 @@
       (is (identical? not-a-channel
                       (<! (tools/cast-as-readport not-a-channel)))))))
 
-(deftest async-future*-test
+(deftest test-async-future*
   (go
     (let [fut (tools/async-future* (fn [resolve]
                                (go (resolve (<! (to-chan [1]))))))]
       (is (= [1 1 1]
              [(<! fut) (<! fut) (<! fut)])))))
 
-(deftest async-future<-test
+(deftest test-async-future<
   (go
     (let [fut (tools/async-future< (to-chan [1]))]
       (is (= [1 1 1]
              [(<! fut) (<! fut) (<! fut)])))))
 
-(deftest then<-test
+(deftest test-then<
   (go
     (let [fut (tools/then< inc (go 1))]
       (is (= [2 2 2]
              [(<! fut) (<! fut) (<! fut)])))))
 
-(deftest all<-test
+(deftest test-all<
   (go
     (let [fut (tools/all< [1 (go 2) 3 (go 4)])]
       (is (= [[1 2 3 4] [1 2 3 4] [1 2 3 4]]
              [(<! fut) (<! fut) (<! fut)])))))
 
-(deftest race<-test
+(deftest test-race<
   (go
     (let [fut (tools/race< [(go 1) 2])]
       (is (= [2 2 2]
