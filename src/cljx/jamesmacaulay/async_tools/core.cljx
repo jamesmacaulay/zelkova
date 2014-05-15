@@ -35,7 +35,7 @@
          (let [state (swap! state-atom assoc :boxed-value (channels/box value))]
            (doseq [handler (:handlers state)]
              ((impl/commit handler) value))
-           (swap! state-atom assoc :handlers nil))))
+           (swap! state-atom dissoc :handlers))))
     state-atom))
 
 (defrecord AsyncFuture [state-atom]
