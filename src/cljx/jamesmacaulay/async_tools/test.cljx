@@ -4,7 +4,7 @@
             #+clj [clojure.test]))
 
 #+clj
-(defmacro deftest
+(defmacro deftest-async
   [name & body]
   (let [deftest-sym (if (:ns &env)
                       'cemerick.cljs.test/deftest

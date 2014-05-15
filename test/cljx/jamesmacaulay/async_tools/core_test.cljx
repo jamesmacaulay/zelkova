@@ -3,15 +3,15 @@
   (:require [jamesmacaulay.async-tools.core :as tools]
             [clojure.core.async :as async :refer [go chan to-chan <!]]
             [clojure.core.async.impl.protocols :as impl]
-            [jamesmacaulay.async-tools.test :refer (deftest)]
-            [clojure.test :refer (is testing)]))
+            [jamesmacaulay.async-tools.test :refer (deftest-async)]
+            [clojure.test :refer (deftest is testing)]))
 #+cljs
 (ns jamesmacaulay.async-tools.core-test
   (:require [jamesmacaulay.async-tools.core :as tools]
             [cljs.core.async :as async :refer [chan to-chan <!]]
             [cljs.core.async.impl.protocols :as impl]
-            [jamesmacaulay.async-tools.test :refer-macros (deftest)]
-            [cemerick.cljs.test :refer-macros (is testing)])
+            [jamesmacaulay.async-tools.test :refer-macros (deftest-async)]
+            [cemerick.cljs.test :refer-macros (deftest is testing)])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 (deftest readport?-test
@@ -21,13 +21,13 @@
                                  "another"
                                  {}])))
 
-(deftest test-constant
+(deftest-async test-constant
   (go
     (let [c (tools/constant 1)]
       (is (= [1 1 1]
              [(<! c) (<! c) (<! c)])))))
 
-(deftest test-cast-as-readport
+(deftest-async test-cast-as-readport
   (go
     (let [channel (chan)
           not-a-channel {}]
@@ -36,7 +36,7 @@
       (is (identical? not-a-channel
                       (<! (tools/cast-as-readport not-a-channel)))))))
 
-(deftest test-async-future*
+(deftest-async test-async-future*
   (go
     (let [fut (tools/async-future* (fn [resolve!]
                                      (go (is (nil? (resolve! (<! (to-chan [1]))))))))]
@@ -51,25 +51,25 @@
       (catch #+clj clojure.lang.ExceptionInfo #+cljs js/Error e
         (is (re-find #"resolve!" (str e)))))))
 
-(deftest test-async-future<
+(deftest-async test-async-future<
   (go
     (let [fut (tools/async-future< (go 1))]
       (is (= [1 1 1]
              [(<! fut) (<! fut) (<! fut)])))))
 
-(deftest test-then<
+(deftest-async test-then<
   (go
     (let [fut (tools/then< inc (go 1))]
       (is (= [2 2 2]
              [(<! fut) (<! fut) (<! fut)])))))
 
-(deftest test-all<
+(deftest-async test-all<
   (go
     (let [fut (tools/all< [1 (go 2) 3 (go 4)])]
       (is (= [[1 2 3 4] [1 2 3 4] [1 2 3 4]]
              [(<! fut) (<! fut) (<! fut)])))))
 
-(deftest test-race<
+(deftest-async test-race<
   (go
     (let [fut (tools/race< [(go 1) 2])]
       (is (= [2 2 2]
