@@ -59,13 +59,13 @@
 (defn then<
   [f ch]
   (async-future* (fn [cb]
-             (async/take! ch (comp cb f)))))
+                   (async/take! ch (comp cb f)))))
 
 (defn all<
   [xs]
   (async-future< (async/map list
-                      (map cast-as-readport
-                           xs))))
+                            (map cast-as-readport
+                                 xs))))
 
 (defn race<
   [xs]
