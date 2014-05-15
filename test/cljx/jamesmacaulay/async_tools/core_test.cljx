@@ -41,15 +41,16 @@
     (let [fut (tools/async-future* (fn [resolve!]
                                      (go (is (nil? (resolve! (<! (to-chan [1]))))))))]
       (is (= [1 1 1]
-             [(<! fut) (<! fut) (<! fut)])))
-    ; is-thrown-with-msg? isn't catching the error correctly for some reason, so:
-    (try
-      (tools/async-future* (fn [resolve!]
-                             (resolve! 1)
-                             (resolve! 2)))
-      (is false "no error was thrown")
-      (catch #+clj clojure.lang.ExceptionInfo #+cljs js/Error e
-        (is (re-find #"resolve!" (str e)))))))
+             [(<! fut) (<! fut) (<! fut)])))))
+
+; thrown-with-msg? isn't catching the error correctly in the cljs go block above,
+; so we'll do a synchronous test:
+(deftest test-async-future*-throws-on-multi-resolve!
+  (is (thrown-with-msg? #+clj clojure.lang.ExceptionInfo #+cljs js/Error
+                        #"resolve"
+                        (tools/async-future* (fn [resolve!]
+                                               (resolve! 1)
+                                               (resolve! 2))))))
 
 (deftest-async test-async-future<
   (go
