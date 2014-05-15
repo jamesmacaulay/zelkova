@@ -69,9 +69,10 @@
 
 (defn all<
   [xs]
-  (async-future< (async/map list
-                            (map cast-as-readport
-                                 xs))))
+  (->> xs
+       (map cast-as-readport)
+       (async/map list)
+       async-future<))
 
 (defn race<
   [xs]
