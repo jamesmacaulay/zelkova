@@ -70,7 +70,6 @@
 (defn race<
   [xs]
   (let [non-readports (remove readport? xs)]
-    (if (empty? non-readports)
-      (async-future<
-        (go (first (async/alts! xs))))
-      (->> non-readports first constant))))
+    (if (seq non-readports)
+      (-> non-readports first constant)
+      (async-future< (go (-> xs async/alts! first))))))
