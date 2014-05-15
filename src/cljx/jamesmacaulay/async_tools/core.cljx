@@ -29,21 +29,23 @@
 
 (defn async-future*
   [f]
-  (let [handlers (atom [])
-        container (atom nil)
-        resolve (fn [value]
-                  (reset! container
-                          (channels/box value))
-                  (doseq [handler @handlers]
-                    ((impl/commit handler) value)))]
-    (f resolve)
+  (let [state-atom (atom {:boxed-value nil
+                          :handlers []})
+        resolve-fn (fn [value]
+                     (let [state (swap! state-atom assoc :boxed-value (channels/box value))]
+                       (doseq [handler (:handlers state)]
+                         ((impl/commit handler) value))
+                       (swap! state-atom assoc :handlers nil)))]
+    (f resolve-fn)
     (reify
       impl/ReadPort
       (take! [_ handler]
-        (let [boxed @container]
-          (when (nil? boxed)
-            (swap! handlers conj handler))
-          boxed)))))
+        (-> state-atom
+            (swap! (fn [state]
+                     (if (nil? (:boxed-value state))
+                       (update-in state [:handlers] conj handler)
+                       state)))
+            :boxed-value)))))
 
 (defn async-future<
   [ch]
