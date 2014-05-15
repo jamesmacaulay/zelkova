@@ -30,12 +30,13 @@
 (defn- async-future-state-atom
   [f]
   (let [state-atom (atom {:boxed-value nil
-                          :handlers []})]
-    (f (fn [value]
-         (let [state (swap! state-atom assoc :boxed-value (channels/box value))]
-           (doseq [handler (:handlers state)]
-             ((impl/commit handler) value))
-           (swap! state-atom dissoc :handlers))))
+                          :handlers []})
+        resolve! (fn [value]
+                   (let [state (swap! state-atom assoc :boxed-value (channels/box value))]
+                     (doseq [handler (:handlers state)]
+                       ((impl/commit handler) value))
+                     (swap! state-atom dissoc :handlers)))]
+    (f resolve!)
     state-atom))
 
 (defrecord AsyncFuture [state-atom]
