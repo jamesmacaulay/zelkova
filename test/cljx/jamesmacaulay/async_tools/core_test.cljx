@@ -38,10 +38,18 @@
 
 (deftest test-async-future*
   (go
-    (let [fut (tools/async-future* (fn [resolve]
-                                     (go (is (nil? (resolve (<! (to-chan [1]))))))))]
+    (let [fut (tools/async-future* (fn [resolve!]
+                                     (go (is (nil? (resolve! (<! (to-chan [1]))))))))]
       (is (= [1 1 1]
-             [(<! fut) (<! fut) (<! fut)])))))
+             [(<! fut) (<! fut) (<! fut)])))
+    ; is-thrown-with-msg? isn't catching the error correctly for some reason, so:
+    (try
+      (tools/async-future* (fn [resolve!]
+                             (resolve! 1)
+                             (resolve! 2)))
+      (is false "no error was thrown")
+      (catch #+clj clojure.lang.ExceptionInfo #+cljs js/Error e
+        (is (re-find #"resolve!" (str e)))))))
 
 (deftest test-async-future<
   (go
@@ -72,4 +80,3 @@
                             (go (<! t5) 2)])]
       (is (= [2 2 2]
              [(<! fut) (<! fut) (<! fut)])))))
-

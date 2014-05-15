@@ -32,7 +32,11 @@
   (let [state-atom (atom {:boxed-value nil
                           :handlers []})
         resolve! (fn [value]
-                   (let [state (swap! state-atom assoc :boxed-value (channels/box value))]
+                   (let [state (swap! state-atom
+                                      (fn [state]
+                                        (when-not (nil? (:boxed-value state))
+                                          (throw (ex-info "Can't call an async-future's `resolve!` function more than once." {})))
+                                        (assoc state :boxed-value (channels/box value))))]
                      (doseq [handler (:handlers state)]
                        ((impl/commit handler) value))
                      (swap! state-atom dissoc :handlers)
