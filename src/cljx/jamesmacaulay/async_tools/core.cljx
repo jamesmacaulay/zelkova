@@ -11,7 +11,7 @@
             [cljs.core.async.impl.channels :as channels])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
-(defrecord ConstantReadPort [boxed-value]
+(deftype ConstantReadPort [boxed-value]
   impl/ReadPort
   (take! [_ _] boxed-value))
 
@@ -19,7 +19,7 @@
   [x]
   (ConstantReadPort. (channels/box x)))
 
-(defrecord AsyncFuture [state-atom]
+(deftype AsyncFuture [state-atom]
   impl/ReadPort
   (take! [_ handler]
     (-> state-atom
