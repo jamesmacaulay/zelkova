@@ -39,7 +39,7 @@
 (deftest test-async-future*
   (go
     (let [fut (tools/async-future* (fn [resolve]
-                               (go (resolve (<! (to-chan [1]))))))]
+                                     (go (is (nil? (resolve (<! (to-chan [1]))))))))]
       (is (= [1 1 1]
              [(<! fut) (<! fut) (<! fut)])))))
 
