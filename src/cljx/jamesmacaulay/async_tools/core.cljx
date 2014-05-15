@@ -11,10 +11,6 @@
             [cljs.core.async.impl.channels :as channels])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
-(defn readport?
-  [x]
-  (satisfies? impl/ReadPort x))
-
 (defrecord ConstantReadPort [boxed-value]
   impl/ReadPort
   (take! [_ _] boxed-value))
@@ -23,9 +19,15 @@
   [x]
   (ConstantReadPort. (channels/box x)))
 
-(defn cast-as-readport
-  [x]
-  (if (readport? x) x (constant x)))
+(defrecord AsyncFuture [state-atom]
+  impl/ReadPort
+  (take! [_ handler]
+    (-> state-atom
+        (swap! (fn [state]
+                 (if (nil? (:boxed-value state))
+                   (update-in state [:handlers] conj handler)
+                   state)))
+        :boxed-value)))
 
 (defn- async-future-state-atom
   [f]
@@ -44,16 +46,6 @@
     (f resolve!)
     state-atom))
 
-(defrecord AsyncFuture [state-atom]
-  impl/ReadPort
-  (take! [_ handler]
-    (-> state-atom
-        (swap! (fn [state]
-                 (if (nil? (:boxed-value state))
-                   (update-in state [:handlers] conj handler)
-                   state)))
-        :boxed-value)))
-
 (defn async-future*
   [f]
   (AsyncFuture. (async-future-state-atom f)))
@@ -61,6 +53,14 @@
 (defn async-future<
   [ch]
   (async-future* (partial async/take! ch)))
+
+(defn readport?
+  [x]
+  (satisfies? impl/ReadPort x))
+
+(defn cast-as-readport
+  [x]
+  (if (readport? x) x (constant x)))
 
 (defn then<
   [f ch]
