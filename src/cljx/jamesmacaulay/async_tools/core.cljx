@@ -27,6 +27,17 @@
   [x]
   (if (readport? x) x (constant x)))
 
+(defn- async-future-state-atom
+  [f]
+  (let [state-atom (atom {:boxed-value nil
+                          :handlers []})]
+    (f (fn [value]
+         (let [state (swap! state-atom assoc :boxed-value (channels/box value))]
+           (doseq [handler (:handlers state)]
+             ((impl/commit handler) value))
+           (swap! state-atom assoc :handlers nil))))
+    state-atom))
+
 (defrecord AsyncFuture [state-atom]
   impl/ReadPort
   (take! [_ handler]
@@ -39,15 +50,7 @@
 
 (defn async-future*
   [f]
-  (let [state-atom (atom {:boxed-value nil
-                          :handlers []})
-        resolve-fn (fn [value]
-                     (let [state (swap! state-atom assoc :boxed-value (channels/box value))]
-                       (doseq [handler (:handlers state)]
-                         ((impl/commit handler) value))
-                       (swap! state-atom assoc :handlers nil)))]
-    (f resolve-fn)
-    (AsyncFuture. state-atom)))
+  (AsyncFuture. (async-future-state-atom f)))
 
 (defn async-future<
   [ch]
