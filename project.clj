@@ -17,8 +17,7 @@
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.4"]
                                   [org.clojure/tools.nrepl "0.2.3"]
-                                  [org.clojure/clojurescript "0.0-2156"]
-                                  [com.cemerick/clojurescript.test "0.3.0"]]}
+                                  [org.clojure/clojurescript "0.0-2156"]]}
              :repl [:dev {:source-paths ["repl" "target/generated/src/clj" "target/generated/src/cljs" "target/generated/test/clj" "target/generated/test/cljs"]
                           :test-paths ["target/generated/test/clj" "target/generated/test/cljs"]}]
              :clj [:dev {:source-paths ["target/generated/src/clj"]
