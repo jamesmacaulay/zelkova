@@ -3,21 +3,21 @@
   :url "http://github.com/jamesmacaulay/async-tools"
   :license {:name "MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[org.clojure/clojure "1.5.1"]
-                 [org.clojure/core.async "0.1.303.0-886421-alpha"]]
-  :plugins [[lein-cljsbuild "1.0.2"]
-            [com.keminglabs/cljx "0.3.2"]
-            [com.cemerick/clojurescript.test "0.3.0"]
-            [com.cemerick/austin "0.1.4"]]
+  :dependencies [[org.clojure/clojure "1.7.0-alpha1"]
+                 [org.clojure/core.async "0.1.338.0-5c5012-alpha"]]
+  :plugins [[lein-cljsbuild "1.0.3"]
+            [com.keminglabs/cljx "0.4.0"]
+            [com.cemerick/clojurescript.test "0.3.1"]
+            [com.cemerick/austin "0.1.5"]]
   :jar-exclusions [#"\.cljx"]
   :aliases {"repl" ["with-profile" "repl" "repl"]
             "clj-test" ["with-profile" "clj" "test"]
             "cljs-test" ["do" "cljx" ["cljsbuild" "test"]]
             "cljs-autotest" ["do" "cljx" ["cljsbuild" "auto" "test"]]
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
-  :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.4"]
-                                  [org.clojure/tools.nrepl "0.2.3"]
-                                  [org.clojure/clojurescript "0.0-2156"]]}
+  :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.5"]
+                                  [org.clojure/tools.nrepl "0.2.4"]
+                                  [org.clojure/clojurescript "0.0-2322"]]}
              :repl [:dev {:source-paths ["repl" "target/generated/src/clj" "target/generated/src/cljs" "target/generated/test/clj" "target/generated/test/cljs"]
                           :test-paths ["target/generated/test/clj" "target/generated/test/cljs"]}]
              :clj [:dev {:source-paths ["target/generated/src/clj"]
