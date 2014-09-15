@@ -7,5 +7,4 @@
 
 (defn run-tests
   []
-  (refresh)
   (clojure.test/run-all-tests #"jamesmacaulay\..*"))
