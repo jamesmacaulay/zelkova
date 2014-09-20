@@ -16,6 +16,7 @@
             [cemerick.cljs.test :refer-macros (deftest is testing)])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
+
 (deftest-async test-io
   (go
     (let [in (signals/write-port 0)
@@ -62,29 +63,47 @@
     (let [in (signals/write-port 0)
           decremented (signals/lift dec in)
           incremented (signals/lift inc in)
-          combined (signals/lift vector decremented incremented)
+          combined (signals/lift (fn [a b] {:decremented a
+                                            :incremented b})
+                                 decremented
+                                 incremented)
           out (signals/read-port combined)]
-      (>! in 1)
-      (is (= [0 2] (<! out)))
+      (>! in 2)
+      (is (= {:decremented 1
+              :incremented 3}
+             (<! out)))
       (>! in 10)
-      (is (= [9 11] (<! out))))))
+      (is (= {:decremented 9
+              :incremented 11}
+             (<! out))))))
 
-;(deftest-async test-async-makes-signals-asynchronous
-;  (go
-;    (let [in (chan 1000)
-;          wp (signals/write-port 0)
-;          decremented (signals/lift dec wp)
-;          incremented (signals/lift inc wp)
-;          async-incremented (signals/async incremented)
-;          combined (signals/lift vector decremented async-incremented)
-;          out (signals/read-port combined)]
-;      (async/pipe in wp)
-;      (>! in 1)
-;      (is (= [0 1] (<! out)))
-;      (>! in 10)
-;      (is (= [0 2] (<! out)))
-;      (is (= [9 1] (<! out))))))
-
+(deftest-async test-async-makes-signals-asynchronous
+  (go
+    (let [in (chan 1000)
+          wp (signals/write-port 0)
+          decremented (signals/lift dec wp)
+          incremented (signals/lift inc wp)
+          async-incremented (signals/async incremented)
+          combined (signals/lift (fn [a b] {:decremented a
+                                            :async-incremented b})
+                                 decremented
+                                 async-incremented)
+          out (signals/read-port combined)]
+      (async/pipe in wp)
+      (>! in 2)
+      (is (= {:decremented 1
+              :async-incremented 1}
+             (<! out)))
+      (is (= {:decremented 1
+              :async-incremented 3}
+             (<! out)))
+      (>! in 10)
+      (is (= {:decremented 9
+              :async-incremented 3}
+             (<! out)))
+      (is (= {:decremented 9
+              :async-incremented 11}
+             (<! out))))))
 
 (deftest-async test-constant
   (go
@@ -97,19 +116,18 @@
       (>! in 2)
       (is (= [2 :foo] (<! out))))))
 
-
-;(deftest-async test-merge
-;  (go
-;    (let [in1 (signals/write-port 0)
-;          in2 (signals/write-port 0)
-;          merged (signals/merge in1 in2)
-;          out (signals/read-port merged)]
-;      (>! in1 1)
-;      (is (= 1 (<! out)))
-;      (>! in2 2)
-;      (is (= 2 (<! out)))
-;      (>! in1 3)
-;      (is (= 3 (<! out))))))
+(deftest-async test-merge
+  (go
+    (let [in1 (signals/write-port 0)
+          in2 (signals/write-port 0)
+          merged (signals/merge in1 in2)
+          out (signals/read-port merged)]
+      (>! in1 1)
+      (is (= 1 (<! out)))
+      (>! in2 2)
+      (is (= 2 (<! out)))
+      (>! in1 3)
+      (is (= 3 (<! out))))))
 
 (comment
   ; A little excercise to get a feel for how this might work...
@@ -221,14 +239,16 @@
 
   (def input
     (let [delta (lift #(/ % 20)
-                      [(fps 25)])]
+                      (fps 25))]
       (sample-on delta
                  (lift vector
-                       [delta keyboard/arrows]))))
+                       delta
+                       keyboard/arrows))))
 
 ;main  = lift2 render Window.dimensions (foldp step mario input)
 
   (def main
     (lift render
-          [window/dimensions (foldp step mario input)]))
+          window/dimensions
+          (foldp step mario input)))
 )
