@@ -63,17 +63,17 @@
     (Sprout. value (port mult))))
 
 (defn input
-  [id mc-in v]
-  (let [c-in (port mc-in)
-        c-out (chan)
-        eid (port event-notify)]
-    (go-loop [prev v]
-      (let [msg (if (= id (<! eid))
-                  (change (<! c-in))
+  [id init]
+  (let [c-in (port event-notify)
+        c-out (chan)]
+    (go-loop [prev init]
+      (let [[eid v] (<! c-in)
+            msg (if (= id eid)
+                  (change v)
                   (no-change prev))]
         (>! c-out msg)
         (recur (body msg))))
-    (Node. v (async/mult c-out))))
+    (Node. init (async/mult c-out))))
 
 (defn lift-msgs
   [f & sigs]
@@ -162,11 +162,9 @@
 (defn- channel-input
   [ch v]
   (let [id (gen-id)
-        mc-out (async/mult ch)
-        ids (async/map (constantly id)
-                       [(port mc-out)])]
-    (async/pipe ids new-event)
-    (input id mc-out v)))
+        events (async/map (partial vector id) [ch])]
+    (async/pipe events new-event)
+    (input id v)))
 
 (defn read-port
   [sig]
