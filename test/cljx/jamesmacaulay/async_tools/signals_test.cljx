@@ -1,6 +1,7 @@
 #+clj
 (ns jamesmacaulay.async-tools.signals-test
-  (:require [jamesmacaulay.async-tools.signals :as signals]
+  (:require [jamesmacaulay.async-tools.core :as tools]
+            [jamesmacaulay.async-tools.signals :as signals]
             [clojure.core.async :as async :refer [go go-loop chan to-chan <! >!]]
             [clojure.core.async.impl.protocols :as impl]
             [jamesmacaulay.async-tools.test :refer (deftest-async)]
@@ -9,7 +10,8 @@
 
 #+cljs
 (ns jamesmacaulay.async-tools.signals-test
-  (:require [jamesmacaulay.async-tools.signals :as signals]
+  (:require [jamesmacaulay.async-tools.core :as tools]
+            [jamesmacaulay.async-tools.signals :as signals]
             [cljs.core.async :as async :refer [chan to-chan <! >!]]
             [cljs.core.async.impl.protocols :as impl]
             [jamesmacaulay.async-tools.test :refer-macros (deftest-async)]
@@ -128,6 +130,21 @@
       (is (= 2 (<! out)))
       (>! in1 3)
       (is (= 3 (<! out))))))
+
+;(deftest-async test-sample-on
+;  (go
+;    (let [fake-mouse-position (signals/write-port [0 0])
+;          fake-mouse-clicks (signals/write-port :click)
+;          out (->> (signals/sample-on fake-mouse-clicks fake-mouse-position)
+;                   signals/read-port)]
+;      (tools/log out)
+;      (>! fake-mouse-position [10 10])
+;      (>! fake-mouse-clicks :click)
+;      (is (= [10 10] (<! out)))
+;      (>! fake-mouse-position [20 20])
+;      (>! fake-mouse-position [30 30])
+;      (>! fake-mouse-clicks :click)
+;      (is (= [30 30] (<! out))))))
 
 (comment
   ; A little excercise to get a feel for how this might work...
