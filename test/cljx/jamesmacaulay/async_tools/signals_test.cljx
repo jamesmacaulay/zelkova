@@ -26,6 +26,13 @@
       (>! in 1)
       (is (= 1 (<! out))))))
 
+;(deftest-async test-lift2
+;  (go
+;    (let [graph (signals/graph {:inc (signals/lift inc (signals/input :in))
+;                                :dec (signals/lift dec (signals/input :in))})
+;          inc-out (async/sub graph :inc (chan))
+;          dec-out (async/sub graph :dec (chan))])))
+
 (deftest-async test-lift
   (go
     (let [in (signals/write-port 0)
