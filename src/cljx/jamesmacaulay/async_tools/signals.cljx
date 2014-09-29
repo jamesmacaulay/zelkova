@@ -139,93 +139,6 @@
         (recur msg)))
     (->Signal v (async/mult c-out))))
 
-;(defn- channel-input
-;  [ch v]
-;  (let [id (gen-id)
-;        events (async/map (partial vector id) [ch])]
-;    (async/pipe events new-event)
-;    (input* event-notify id v)))
-;
-;
-;(defn write-port
-;  [init]
-;  (let [ch (chan 1)
-;        sig (channel-input ch init)]
-;    (reify
-;      impl/Channel
-;      (close! [_] (impl/close! ch))
-;      (closed? [_] (impl/closed? ch))
-;      impl/WritePort
-;      (put! [_ val fn1] (impl/put! ch val fn1))
-;      SignalProtocol
-;      (sprout [_] (sprout sig)))))
-
-
-
-;(defn async
-;  [sig]
-;  (let [s (sprout sig)
-;        c-in (:channel s)
-;        c-out (chan 1 (comp (filter change?)
-;                            (map body)))]
-;    (channel-input (async/pipe c-in c-out)
-;                   (:value s))))
-;
-;(defn constant
-;  [value]
-;  (let [msg (no-change value)
-;        out (async/tap event-notify (chan 1 (map (constantly msg))))]
-;    (->Signal value (async/mult out))))
-
-;(defn merge
-;  [& sigs]
-;  (let [sprouts (mapv sprout sigs)
-;        first-value (:value (first sprouts))
-;        msg-vectors (->> sprouts
-;                         (mapv :channel)
-;                         (async/map vector))
-;        c-out (chan)]
-;    (go-loop [prev first-value]
-;      (let [msgs (<! msg-vectors)
-;            first-change (first (filter change? msgs))
-;            msg (or first-change (no-change prev))]
-;        (>! c-out msg)
-;        (recur (body msg))))
-;    (Node. first-value (async/mult c-out))))
-
-;(defn merge
-;  [& sigs]
-;  (apply lift-msgs*
-;         (fn [& msgs]
-;           (->> msgs (filter change?) first))
-;         sigs))
-
-;(defn sample-on
-;  [sampler-sig value-sig]
-;  (let [sample-channel (:channel (sprout sampler-sig))
-;        {init :value
-;         value-channel :channel} (sprout value-sig)
-;        c-in (async/map vector [sample-channel value-channel])
-;        c-out (chan)]
-;    (go-loop []
-;      (let [[sample-msg value-msg] (<! c-in)
-;            value (body value-msg)
-;            msg (if (change? sample-msg)
-;                  (change value)
-;                  (no-change value))]
-;        (>! c-out msg)
-;        (recur)))
-;    (Node. init (async/mult c-out))))
-
-;(defn sample-on
-;  [sampler-sig value-sig]
-;  (lift-msgs (fn [sample-msg value-msg]
-;               (when (change? sample-msg)
-;                 (change (body value-msg))))
-;             sampler-sig
-;             value-sig))
-
-
 (defprotocol NodeProtocol
   (node->signal [n source-node->signal])
   (sources [n]))
@@ -272,30 +185,6 @@
       (event-topic [_] (event-topic node))
       (event-channel-fn [_] (event-channel-fn node)))))
 
-
-;(defrecord Input
-;  [init event-channel-fn topic])
-
-;(defn async*
-;  [id sig]
-;  (let [s (sprout sig)
-;        c-in (:channel s)
-;        c-out (chan 1 (comp (filter change?)
-;                            (map body)))]
-;    (async/pipe c-in c-out)
-;    (input* id (:value s))))
-;
-;(def async
-;  [source-node]
-;  (let [topic (gen-id)]
-;    (reify
-;      NodeProtocol
-;      (node->signal [_ source-node->signal]
-;        (async* topic (source-node->signal source-node)))
-;      (sources [_] [source-node])
-;      InputNodeProtocol
-;      (event-topic [_] topic)
-;      (event-channel-fn [_] ()))))
 
 (defn lift-msgs
   [f & source-nodes]
@@ -349,14 +238,11 @@
 
 
 (defn node-graph-zipper
-  [output-nodes]
+  [output-node]
   (zip/zipper (constantly true)
-              (fn [x]
-                (if (sequential? x)
-                  (seq x)
-                  (seq (sources x))))
+              (comp seq sources)
               nil
-              output-nodes))
+              output-node))
 
 (defn skip-subtree
   [loc]
@@ -367,28 +253,27 @@
               (recur (zip/up p)))
           [(zip/node p) :end]))))
 
-(defn output-nodes->dependency-map
-  [output-nodes]
-  (let []
-    (loop [deps {}
-           loc (node-graph-zipper output-nodes)]
-      (cond
-        (zip/end? loc)
-          deps
-        (contains? deps (zip/node loc))
-          (recur deps
-                 (skip-subtree loc))
-        :else
-          (let [n (zip/node loc)]
-            (recur (if (sequential? n)
-                     deps
-                     (assoc deps n (set (sources n))))
-                   (zip/next loc)))))))
+(defn output-node->dependency-map
+  [output-node]
+  (loop [deps {}
+         loc (node-graph-zipper output-node)]
+    (cond
+      (zip/end? loc)
+      deps
+      (contains? deps (zip/node loc))
+      (recur deps
+             (skip-subtree loc))
+      :else
+      (let [n (zip/node loc)]
+        (recur (if (sequential? n)
+                 deps
+                 (assoc deps n (set (sources n))))
+               (zip/next loc))))))
 
 (defn topsort
-  [outputs]
-  (-> outputs
-      output-nodes->dependency-map
+  [output]
+  (-> output
+      output-node->dependency-map
       kahn/kahn-sort
       reverse))
 
@@ -431,21 +316,11 @@
 
 (defn wire-up
   [input-nodes output-node spawned-world signal-map]
-  (let [output-sprout (sprout (get signal-map output-node))
-        output-channel (tools/concat (async/to-chan [(:value output-sprout)])
-                                     (async/pipe (:channel output-sprout)
-                                                 (chan 1 (comp (filter change?)
-                                                               (map body)))))
-        event-mult (->> input-nodes
-                        (sequence (comp (map event-topic)
-                                        (map spawned-world)
-                                        (filter identity)))
-                        async/merge
-                        async/mult)]
-
-    (doseq [n input-nodes]
-      (connect-events (get signal-map n) event-mult))
-    output-channel))
+  (let [output-sprout (sprout (get signal-map output-node))]
+    (tools/concat (async/to-chan [(:value output-sprout)])
+                  (async/pipe (:channel output-sprout)
+                              (chan 1 (comp (filter change?)
+                                            (map body)))))))
 
 
 (defrecord CompiledGraph
@@ -453,8 +328,16 @@
   CompiledGraphProtocol
   (spawn* [_ world-overrides]
     (let [spawned-world (spawn-world default-world world-overrides)
+          event-mult (->> input-nodes
+                          (sequence (comp (map event-topic)
+                                          (map spawned-world)
+                                          (filter identity)))
+                          async/merge
+                          async/mult)
           signal-map (build-signal-map sorted-nodes)
           output-channel (wire-up input-nodes output-node spawned-world signal-map)]
+      (doseq [n input-nodes]
+        (connect-events (get signal-map n) event-mult))
       (->RunningGraph spawned-world output-channel))))
 
 (defn remove-duplicate-inputs
@@ -498,4 +381,13 @@
   (>!! letters-in :z)
   (async/close! out)
   (<!! (async/into [] out))
+
+
+  (def mouse-position
+    (signals/input :mouse-position [0 0] #(...)))
+
+  (def events-input (chan))
+
   )
+
+
