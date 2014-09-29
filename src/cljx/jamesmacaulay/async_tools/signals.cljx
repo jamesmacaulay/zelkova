@@ -305,13 +305,13 @@
       (apply lift-msgs* f (map source-node->signal source-nodes)))
     (sources [_] source-nodes)))
 
-;(defn sample-on
-;  [sampler-sig value-sig]
-;  (lift-msgs (fn [sample-msg value-msg]
-;               (when (change? sample-msg)
-;                 (change (body value-msg))))
-;             sampler-sig
-;             value-sig))
+(defn sample-on
+  [sampler-sig value-sig]
+  (lift-msgs (fn [sample-msg value-msg]
+               (when (change? sample-msg)
+                 (change (body value-msg))))
+             sampler-sig
+             value-sig))
 
 (defn lift
   [f & sigs]
