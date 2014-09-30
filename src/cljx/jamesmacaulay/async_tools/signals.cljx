@@ -52,6 +52,15 @@
   [val]
   (->NoChange val))
 
+(defprotocol NodeProtocol
+  (node->mult [n node-mults event-mult])
+  (init [n])
+  (sources [n]))
+
+(defprotocol InputNodeProtocol
+  (event-topic [n])
+  (event-channel-fn [n]))
+
 (defn- gen-id
   []
   (gensym "event-topic-"))
@@ -86,9 +95,11 @@
   (connect-events [_ events-mult]
     (async/tap events-mult events-channel)))
 
-(defn input*
-  [id init]
-  (let [c-in (chan)
+(defn spawn-input
+  [input-node event-mult]
+  (let [init (init input-node)
+        id (event-topic input-node)
+        c-in (async/tap event-mult (chan))
         c-out (chan)]
     (go-loop [prev init]
       (let [{eid :topic
@@ -98,16 +109,13 @@
                   (no-change prev))]
         (>! c-out msg)
         (recur (body msg))))
-    (->InputSignal init (async/mult c-out) c-in)))
+    (async/mult c-out)))
 
-(defn lift-msgs*
-  [f & sigs]
-  (let [sprouts (mapv sprout sigs)
-        init-msgs (mapv (comp change :value) sprouts)
-        channels (mapv :channel sprouts)
+(defn spawn-lift
+  [f lift-node mults]
+  (let [channels (mapv #(async/tap % (chan)) mults)
         c-in (async/map vector channels)
-        init-msg (apply f init-msgs)
-        v (body init-msg)
+        v (init lift-node)
         c-out (chan)]
     (go-loop [prev v]
       (let [input-msgs (<! c-in)
@@ -120,11 +128,11 @@
                   (no-change prev))]
         (>! c-out msg)
         (recur (body msg))))
-    (->Signal v (async/mult c-out))))
+    (async/mult c-out)))
 
-(defn foldp-msgs*
-  [f v sig]
-  (let [c-in (:channel (sprout sig))
+(defn spawn-foldp
+  [f v mult]
+  (let [c-in (async/tap mult (chan))
         c-out (chan)]
     (go-loop [acc (change v)]
       (let [input-msg (<! c-in)
@@ -137,40 +145,33 @@
                   (no-change acc))]
         (>! c-out msg)
         (recur msg)))
-    (->Signal v (async/mult c-out))))
-
-(defprotocol NodeProtocol
-  (node->signal [n source-node->signal])
-  (sources [n]))
-
-(defprotocol InputNodeProtocol
-  (event-topic [n])
-  (event-channel-fn [n]))
+    (async/mult c-out)))
 
 (defn input?
   [x]
   (satisfies? InputNodeProtocol x))
 
 (defn input
-  ([init]
-   (input init nil (gen-id)))
-  ([init event-channel-fn']
-   (input init event-channel-fn' (gen-id)))
-  ([init event-channel-fn' topic]
+  ([init']
+   (input init' nil (gen-id)))
+  ([init' event-channel-fn']
+   (input init' event-channel-fn' (gen-id)))
+  ([init' event-channel-fn' topic]
    (reify
      NodeProtocol
-     (node->signal [_ _]
-       (input* topic init))
+     (node->mult [n _ event-mult]
+       (spawn-input n event-mult))
+     (init [_] init')
      (sources [_] [])
      InputNodeProtocol
      (event-topic [_] topic)
      (event-channel-fn [_] event-channel-fn'))))
 
 (defn write-port
-  [init]
+  [init']
   (let [ch (chan 1)
         mult (async/mult ch)
-        node (input init #(async/tap mult (chan)))]
+        node (input init' #(async/tap mult (chan)))]
     (reify
       impl/Channel
       (close! [_] (impl/close! ch))
@@ -178,8 +179,9 @@
       impl/WritePort
       (put! [_ val fn1] (impl/put! ch val fn1))
       NodeProtocol
-      (node->signal [_ _]
-        (input* (event-topic node) init))
+      (node->mult [_ _ event-mult]
+        (spawn-input node event-mult))
+      (init [_] init')
       (sources [_] [])
       InputNodeProtocol
       (event-topic [_] (event-topic node))
@@ -190,8 +192,9 @@
   [f & source-nodes]
   (reify
     NodeProtocol
-    (node->signal [_ source-node->signal]
-      (apply lift-msgs* f (map source-node->signal source-nodes)))
+    (node->mult [n node-mults _]
+      (spawn-lift f n (mapv node-mults source-nodes)))
+    (init [_] (body (apply f (map (comp change init) source-nodes))))
     (sources [_] source-nodes)))
 
 (defn sample-on
@@ -210,12 +213,13 @@
          sigs))
 
 (defn foldp-msgs
-  [f init source-node]
+  [f init' source-node]
   (reify
     NodeProtocol
-    (node->signal
-      [_ source-node->signal]
-      (foldp-msgs* f init (source-node->signal source-node)))
+    (node->mult
+      [_ node-mults _]
+      (spawn-foldp f init' (node-mults source-node)))
+    (init [_] init')
     (sources [_] [source-node])))
 
 (defn foldp
@@ -224,6 +228,23 @@
                 (change (f (body msg) (body acc-msg))))
               v
               sig))
+
+;(defn async
+;  [node]
+;  (let [topic (gen-id)]
+;    (reify
+;      NodeProtocol
+;      (node->mult
+;        [_ node-mults]
+;        (let [source-sprout (sprout (node-mults node))]
+;
+;          (input* topic (:value source-sprout))))
+;      (sources [_] [node])
+;      InputNodeProtocol
+;      (event-topic [_] topic)
+;      (event-channel-fn [_]
+;        ; can't write this function, need access to live source signal
+;        ))))
 
 (defn constant
   [value]
@@ -301,26 +322,26 @@
           {}
           default-world))
 
-(defn build-signal-map
+(defn build-node-mults
   "Takes a sequence of topologically sorted nodes and returns a map of nodes
   to signals."
-  [sorted-nodes]
-  (reduce (fn [signal-map node]
-            (assoc signal-map
-              node (node->signal node signal-map)))
+  [sorted-nodes event-mult]
+  (reduce (fn [node-mults node]
+            (assoc node-mults
+              node (node->mult node node-mults event-mult)))
           {}
           sorted-nodes))
 
 (defrecord RunningGraph
-  [world output-channel])
+  [world events-input output-channel])
 
 (defn wire-up
-  [input-nodes output-node spawned-world signal-map]
-  (let [output-sprout (sprout (get signal-map output-node))]
-    (tools/concat (async/to-chan [(:value output-sprout)])
-                  (async/pipe (:channel output-sprout)
-                              (chan 1 (comp (filter change?)
-                                            (map body)))))))
+  [output-node signal-map]
+  (tools/concat (async/to-chan [(init output-node)])
+                (async/pipe (async/tap (get signal-map output-node)
+                                       (chan))
+                            (chan 1 (comp (filter change?)
+                                          (map body))))))
 
 
 (defrecord CompiledGraph
@@ -328,17 +349,17 @@
   CompiledGraphProtocol
   (spawn* [_ world-overrides]
     (let [spawned-world (spawn-world default-world world-overrides)
-          event-mult (->> input-nodes
-                          (sequence (comp (map event-topic)
-                                          (map spawned-world)
-                                          (filter identity)))
-                          async/merge
-                          async/mult)
-          signal-map (build-signal-map sorted-nodes)
-          output-channel (wire-up input-nodes output-node spawned-world signal-map)]
-      (doseq [n input-nodes]
-        (connect-events (get signal-map n) event-mult))
-      (->RunningGraph spawned-world output-channel))))
+          event-source-channels (->> input-nodes
+                                     (sequence (comp (map event-topic)
+                                                     (map spawned-world)
+                                                     (filter identity))))
+          events-input (if (seq event-source-channels)
+                         (async/merge event-source-channels)
+                         (chan))
+          event-mult (async/mult events-input)
+          signal-map (build-node-mults sorted-nodes event-mult)
+          output-channel (wire-up output-node signal-map)]
+      (->RunningGraph spawned-world events-input output-channel))))
 
 (defn remove-duplicate-inputs
   [sorted-nodes]
@@ -363,31 +384,3 @@
                      output-node
                      sorted-nodes
                      default-world)))
-
-
-
-
-
-(comment
-  (def numbers-in (chan 1))
-  (def letters-in (chan 1))
-  (def numbers (signals/input-node :numbers 0 (constantly numbers-in)))
-  (def letters (signals/input-node :letters :a (constantly letters-in)))
-  (def combination (signals/lift-msgs-node (fn [nm lm] (signals/change [(signals/body nm) (signals/body lm)])) numbers letters))
-  (def compiled (signals/compile-graph combination))
-  (def running (signals/spawn compiled))
-  (def out (:output-channel running))
-  (>!! numbers-in 11)
-  (>!! letters-in :z)
-  (async/close! out)
-  (<!! (async/into [] out))
-
-
-  (def mouse-position
-    (signals/input :mouse-position [0 0] #(...)))
-
-  (def events-input (chan))
-
-  )
-
-

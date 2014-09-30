@@ -30,13 +30,6 @@
       (>! in 1)
       (is (= 1 (<! out))))))
 
-;(deftest-async test-lift2
-;  (go
-;    (let [graph (signals/graph {:inc (signals/lift inc (signals/input :in))
-;                                :dec (signals/lift dec (signals/input :in))})
-;          inc-out (async/sub graph :inc (chan))
-;          dec-out (async/sub graph :dec (chan))])))
-
 (deftest-async test-lift
   (go
     (let [in (signals/write-port 0)
@@ -170,31 +163,22 @@
 
 (deftest-async test-sample-on
   (go
-    (let [events-input (chan)
-          events-mult (async/mult events-input)
-          topic-channel-fn (fn [topic]
-                             #(async/tap events-mult
-                                         (chan 1 (comp (filter (comp (partial = topic) :topic))
-                                                       (map :value)))))
-          fake-mouse-position (signals/input [0 0]
-                                             (topic-channel-fn :mouse-position)
-                                             :mouse-position)
-          fake-mouse-clicks (signals/input :click
-                                           (topic-channel-fn :mouse-clicks)
-                                           :mouse-clicks)
-          out (->> (signals/sample-on fake-mouse-clicks fake-mouse-position)
-                   signals/compile-graph
-                   signals/spawn
-                   :output-channel)
+    (let [fake-mouse-position (signals/input [0 0] nil :mouse-position)
+          fake-mouse-clicks (signals/input :click nil :mouse-clicks)
+          graph (->> (signals/sample-on fake-mouse-clicks fake-mouse-position)
+                     signals/compile-graph
+                     signals/spawn)
+          out (:output-channel graph)
           pos (partial signals/->Event :mouse-position)
           click (signals/->Event :mouse-clicks :click)]
+      (async/onto-chan (:events-input graph)
+                       [(pos [10 10])
+                        click
+                        (pos [20 20])
+                        (pos [30 30])
+                        click])
       (is (= [0 0] (<! out)))
-      (>! events-input (pos [10 10]))
-      (>! events-input click)
       (is (= [10 10] (<! out)))
-      (>! events-input (pos [20 20]))
-      (>! events-input (pos [30 30]))
-      (>! events-input click)
       (is (= [30 30] (<! out))))))
 
 (comment
