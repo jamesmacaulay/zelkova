@@ -28,7 +28,8 @@
                   :output-channel)]
       (is (= 0 (<! out)))
       (>! in 1)
-      (is (= 1 (<! out))))))
+      (is (= 1 (<! out)))
+      (async/close! in))))
 
 (deftest-async test-lift
   (go
@@ -40,7 +41,8 @@
                   :output-channel)]
       (is (= 1 (<! out)))
       (>! in 1)
-      (is (= 2 (<! out))))
+      (is (= 2 (<! out)))
+      (async/close! in))
     (let [ins [(signals/write-port 0)
                (signals/write-port 0)
                (signals/write-port 0)]
@@ -57,7 +59,9 @@
       (>! (ins 2) 3)
       (is (= 6 (<! out)))
       (>! (ins 0) 10)
-      (is (= 15 (<! out))))))
+      (is (= 15 (<! out)))
+      (doseq [ch ins]
+        (async/close! ch)))))
 
 
 (deftest-async test-foldp
@@ -74,7 +78,8 @@
       (>! in 1)
       (is (= 2 (<! out)))
       (>! in 10)
-      (is (= 12 (<! out))))))
+      (is (= 12 (<! out)))
+      (async/close! in))))
 
 (deftest-async test-regular-signals-are-synchronous
   (go
@@ -99,7 +104,8 @@
       (>! in 10)
       (is (= {:decremented 9
               :incremented 11}
-             (<! out))))))
+             (<! out)))
+      (async/close! in))))
 
 ;(deftest-async test-async-makes-signals-asynchronous
 ;  (go
@@ -142,7 +148,8 @@
       (>! in 1)
       (is (= [1 :foo] (<! out)))
       (>! in 2)
-      (is (= [2 :foo] (<! out))))))
+      (is (= [2 :foo] (<! out)))
+      (async/close! in))))
 
 (deftest-async test-merge
   (go
@@ -159,7 +166,9 @@
       (>! in2 2)
       (is (= 2 (<! out)))
       (>! in1 3)
-      (is (= 3 (<! out))))))
+      (is (= 3 (<! out)))
+      (async/close! in1)
+      (async/close! in2))))
 
 (deftest-async test-sample-on
   (go
@@ -176,10 +185,14 @@
                         click
                         (pos [20 20])
                         (pos [30 30])
+                        click
+                        (pos [40 40])
+                        (pos [50 50])
                         click])
       (is (= [0 0] (<! out)))
       (is (= [10 10] (<! out)))
-      (is (= [30 30] (<! out))))))
+      (is (= [30 30] (<! out)))
+      (is (= [50 50] (<! out))))))
 
 (comment
   ; A little excercise to get a feel for how this might work...

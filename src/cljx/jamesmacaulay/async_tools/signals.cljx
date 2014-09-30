@@ -102,13 +102,14 @@
         c-in (async/tap event-mult (chan))
         c-out (chan)]
     (go-loop [prev init]
-      (let [{eid :topic
-             v :value} (<! c-in)
-            msg (if (= id eid)
-                  (change v)
-                  (no-change prev))]
-        (>! c-out msg)
-        (recur (body msg))))
+      (let [event (<! c-in)]
+        (if (nil? event)
+          (async/close! c-out)
+          (let [msg (if (= id (:topic event))
+                      (change (:value event))
+                      (no-change prev))]
+            (>! c-out msg)
+            (recur (body msg))))))
     (async/mult c-out)))
 
 (defn spawn-lift
@@ -118,16 +119,18 @@
         v (init lift-node)
         c-out (chan)]
     (go-loop [prev v]
-      (let [input-msgs (<! c-in)
-            msg (if (some change? input-msgs)
-                  (let [result (apply f input-msgs)]
-                    (if (and (satisfies? Message result)
-                             (change? result))
-                      result
-                      (no-change prev)))
-                  (no-change prev))]
-        (>! c-out msg)
-        (recur (body msg))))
+      (let [input-msgs (<! c-in)]
+        (if (nil? input-msgs)
+          (async/close! c-out)
+          (let [msg (if (some change? input-msgs)
+                      (let [result (apply f input-msgs)]
+                        (if (and (satisfies? Message result)
+                                 (change? result))
+                          result
+                          (no-change prev)))
+                      (no-change prev))]
+            (>! c-out msg)
+            (recur (body msg))))))
     (async/mult c-out)))
 
 (defn spawn-foldp
@@ -135,16 +138,18 @@
   (let [c-in (async/tap mult (chan))
         c-out (chan)]
     (go-loop [acc (change v)]
-      (let [input-msg (<! c-in)
-            msg (if (change? input-msg)
-                  (let [result (f input-msg acc)]
-                    (if (and (satisfies? Message result)
-                             (change? result))
-                      result
-                      (no-change acc)))
-                  (no-change acc))]
-        (>! c-out msg)
-        (recur msg)))
+      (let [input-msg (<! c-in)]
+        (if (nil? input-msg)
+          (async/close! c-out)
+          (let [msg (if (change? input-msg)
+                      (let [result (f input-msg acc)]
+                        (if (and (satisfies? Message result)
+                                 (change? result))
+                          result
+                          (no-change acc)))
+                      (no-change acc))]
+            (>! c-out msg)
+            (recur msg)))))
     (async/mult c-out)))
 
 (defn input?
