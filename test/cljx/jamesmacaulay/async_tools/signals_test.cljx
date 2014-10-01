@@ -26,10 +26,9 @@
                   signals/compile-graph
                   signals/spawn
                   :output-channel)]
-      (is (= 0 (<! out)))
-      (>! in 1)
-      (is (= 1 (<! out)))
-      (async/close! in))))
+      (async/onto-chan in [1 2 3])
+      (is (= [0 1 2 3]
+             (<! (async/into [] out)))))))
 
 (deftest-async test-lift
   (go
@@ -39,10 +38,9 @@
                   signals/compile-graph
                   signals/spawn
                   :output-channel)]
-      (is (= 1 (<! out)))
-      (>! in 1)
-      (is (= 2 (<! out)))
-      (async/close! in))
+      (async/onto-chan in [1 2 3])
+      (is (= [1 2 3 4]
+             (<! (async/into [] out)))))
     (let [ins [(signals/write-port 0)
                (signals/write-port 0)
                (signals/write-port 0)]
@@ -72,14 +70,9 @@
                   signals/compile-graph
                   signals/spawn
                   :output-channel)]
-      (is (= 0 (<! out)))
-      (>! in 1)
-      (is (= 1 (<! out)))
-      (>! in 1)
-      (is (= 2 (<! out)))
-      (>! in 10)
-      (is (= 12 (<! out)))
-      (async/close! in))))
+      (async/onto-chan in [1 2 3])
+      (is (= [0 1 3 6]
+             (<! (async/into [] out)))))))
 
 (deftest-async test-regular-signals-are-synchronous
   (go
@@ -144,12 +137,9 @@
                   signals/compile-graph
                   signals/spawn
                   :output-channel)]
-      (is (= [0 :foo] (<! out)))
-      (>! in 1)
-      (is (= [1 :foo] (<! out)))
-      (>! in 2)
-      (is (= [2 :foo] (<! out)))
-      (async/close! in))))
+      (async/onto-chan in [1 2 3])
+      (is (= [[0 :foo] [1 :foo] [2 :foo] [3 :foo]]
+             (<! (async/into [] out)))))))
 
 (deftest-async test-merge
   (go
@@ -189,10 +179,8 @@
                         (pos [40 40])
                         (pos [50 50])
                         click])
-      (is (= [0 0] (<! out)))
-      (is (= [10 10] (<! out)))
-      (is (= [30 30] (<! out)))
-      (is (= [50 50] (<! out))))))
+      (is (= [[0 0] [10 10] [30 30] [50 50]]
+             (<! (async/into [] out)))))))
 
 (comment
   ; A little excercise to get a feel for how this might work...
