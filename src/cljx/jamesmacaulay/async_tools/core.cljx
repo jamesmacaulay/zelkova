@@ -29,17 +29,21 @@
     out))
 
 (defn do-effects
-  [f ch]
+  [f! ch]
   (go-loop []
     (let [v (<! ch)]
       (when-not (nil? v)
-        (f v)
+        (f! v)
         (recur))))
   ch)
 
-(defn log
+(defn log-mult
+  [mult]
+  (do-effects println (async/tap mult (chan))))
+
+(defn log-channel
   [ch]
-  (do-effects println ch))
+  (async/map (fn [x] (println x) x) [ch]))
 
 
 (deftype ConstantReadPort [boxed-value]
