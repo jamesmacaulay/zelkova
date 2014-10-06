@@ -3,8 +3,8 @@
   :url "http://github.com/jamesmacaulay/async-tools"
   :license {:name "MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[org.clojure/clojure "1.7.0-alpha1"]
-                 [org.clojure/core.async "0.1.338.0-5c5012-alpha"]]
+  :dependencies [[org.clojure/clojure "1.7.0-alpha2"]
+                 [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
   :plugins [[lein-cljsbuild "1.0.3"]
             [com.keminglabs/cljx "0.4.0"]
             [com.cemerick/clojurescript.test "0.3.1"]
@@ -17,7 +17,7 @@
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.5"]
                                   [org.clojure/tools.nrepl "0.2.4"]
-                                  [org.clojure/clojurescript "0.0-2322"]]}
+                                  [org.clojure/clojurescript "0.0-2356"]]}
              :repl [:dev {:source-paths ["repl" "target/generated/src/clj" "target/generated/src/cljs" "target/generated/test/clj" "target/generated/test/cljs"]
                           :test-paths ["target/generated/test/clj" "target/generated/test/cljs"]}]
              :clj [:dev {:source-paths ["target/generated/src/clj"]
