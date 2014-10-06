@@ -18,6 +18,9 @@
             [cemerick.cljs.test :refer-macros (deftest is are testing)])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
+(defn event-constructor
+  [topic]
+  (partial signals/->Event topic))
 
 (deftest test-signal-sources
   (let [input (signals/input 0)
@@ -60,19 +63,16 @@
 
 (deftest-async test-wiring-things-up
   (go
-    (let [numbers-input (signals/input 0 :numbers)
+    (let [number (event-constructor :numbers)
+          letter (event-constructor :letters)
+          numbers-input (signals/input 0 :numbers)
           letters-input (signals/input :a :letters)
           pairs (signals/lift vector numbers-input letters-input)
-          events-input (chan)
-          events-mult (async/mult events-input)
-          {:keys [sorted-signals]} (signals/compile-graph pairs)
-          mult-map (signals/build-message-mult-map sorted-signals events-mult)
-          output (async/tap (get mult-map pairs)
+          live-graph (signals/spawn pairs)
+          output (async/tap live-graph
                             (chan 1 (comp (filter signals/fresh?)
-                                          (map :value))))
-          number (partial signals/->Event :numbers)
-          letter (partial signals/->Event :letters)]
-      (async/onto-chan events-input
+                                          (map :value))))]
+      (async/onto-chan live-graph
                        [(number 1)
                         (letter :b)
                         (number 2)
@@ -81,129 +81,110 @@
              (<! (async/into [] output)))))))
 
 
-;(deftest-async test-io
-;  (go
-;    (let [in (signals/input 0 :foo)
-;          out (->> in
-;                   signals/compile-graph
-;                   signals/spawn
-;                   :output-channel
-;                   (async/map :body))]
-;      (async/onto-chan in [1 2 3])
-;      (is (= [0 1 2 3]
-;             (<! (async/into [] out)))))))
+(deftest-async test-io
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 0 :numbers)
+          graph (signals/spawn in)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= 0 (:init in)))
+      (async/onto-chan graph (map number [1 2 3]))
+      (is (= [1 2 3]
+             (<! (async/into [] out)))))))
 
-;(deftest-async test-lift
+(deftest-async test-lift
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 0 :numbers)
+          incremented (signals/lift inc in)
+          graph (signals/spawn incremented)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= 1 (:init incremented)))
+      (async/onto-chan graph (map number [1 2 3]))
+      (is (= [2 3 4]
+             (<! (async/into [] out)))))
+    (let [[a b c] (map event-constructor [:a :b :c])
+          ins (map (partial signals/input 0) [:a :b :c])
+          summed (apply signals/lift + ins)
+          graph (signals/spawn summed)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= 0 (:init summed)))
+      (async/onto-chan graph [(a 1) (b 2) (c 3) (a 10)])
+      (is (= [1 3 6 15]
+             (<! (async/into [] out)))))))
+
+(deftest-async test-foldp
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 0 :numbers)
+          sum (signals/foldp + 0 in)
+          graph (signals/spawn sum)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= 0 (:init sum)))
+      (async/onto-chan graph (map number [1 2 3]))
+      (is (= [1 3 6]
+             (<! (async/into [] out)))))))
+
+(deftest-async test-regular-signals-are-synchronous
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 0 :numbers)
+          decremented (signals/lift dec in)
+          incremented (signals/lift inc in)
+          combined (signals/lift (fn [a b] {:decremented a
+                                            :incremented b})
+                                 decremented
+                                 incremented)
+          graph (signals/spawn combined)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (async/onto-chan graph (map number [2 10]))
+      (is (= [{:decremented 1
+               :incremented 3}
+              {:decremented 9
+               :incremented 11}]
+             (<! (async/into [] out)))))))
+
+;(deftest-async test-async-makes-signals-asynchronous
 ;  (go
-;    (let [in (signals/write-port 0)
-;          incremented (signals/lift inc in)
-;          out (-> incremented
-;                  signals/compile-graph
-;                  signals/spawn
-;                  :output-channel)]
-;      (async/onto-chan in [1 2 3])
-;      (is (= [1 2 3 4]
-;             (<! (async/into [] out)))))
-;    (let [ins [(signals/write-port 0)
-;               (signals/write-port 0)
-;               (signals/write-port 0)]
-;          summed (apply signals/lift + ins)
-;          out (-> summed
-;                  signals/compile-graph
-;                  signals/spawn
-;                  :output-channel)]
-;      (is (= 0 (<! out)))
-;      (>! (ins 0) 1)
-;      (is (= 1 (<! out)))
-;      (>! (ins 1) 2)
-;      (is (= 3 (<! out)))
-;      (>! (ins 2) 3)
-;      (is (= 6 (<! out)))
-;      (>! (ins 0) 10)
-;      (is (= 15 (<! out)))
-;      (doseq [ch ins]
-;        (async/close! ch)))))
-;
-;
-;(deftest-async test-foldp
-;  (go
-;    (let [in (signals/write-port 0)
-;          sum (signals/foldp + 0 in)
-;          out (-> sum
-;                  signals/compile-graph
-;                  signals/spawn
-;                  :output-channel)]
-;      (async/onto-chan in [1 2 3])
-;      (is (= [0 1 3 6]
-;             (<! (async/into [] out)))))))
-;
-;(deftest-async test-regular-signals-are-synchronous
-;  (go
-;    (let [in (signals/write-port 0)
-;          decremented (signals/lift dec in)
-;          incremented (signals/lift inc in)
+;    (let [in (chan 1000)
+;          wp (signals/write-port 0)
+;          decremented (signals/lift dec wp)
+;          incremented (signals/lift inc wp)
+;          async-incremented (signals/async incremented)
 ;          combined (signals/lift (fn [a b] {:decremented a
-;                                            :incremented b})
+;                                            :async-incremented b})
 ;                                 decremented
-;                                 incremented)
-;          out (-> combined
-;                  signals/compile-graph
-;                  signals/spawn
-;                  :output-channel)]
-;      (is (= {:decremented -1
-;              :incremented 1}
-;             (<! out)))
+;                                 async-incremented)
+;          out (signals/read-port combined)]
+;      (async/pipe in wp)
 ;      (>! in 2)
 ;      (is (= {:decremented 1
-;              :incremented 3}
+;              :async-incremented 1}
+;             (<! out)))
+;      (is (= {:decremented 1
+;              :async-incremented 3}
 ;             (<! out)))
 ;      (>! in 10)
 ;      (is (= {:decremented 9
-;              :incremented 11}
+;              :async-incremented 3}
 ;             (<! out)))
-;      (async/close! in))))
-;
-;;(deftest-async test-async-makes-signals-asynchronous
-;;  (go
-;;    (let [in (chan 1000)
-;;          wp (signals/write-port 0)
-;;          decremented (signals/lift dec wp)
-;;          incremented (signals/lift inc wp)
-;;          async-incremented (signals/async incremented)
-;;          combined (signals/lift (fn [a b] {:decremented a
-;;                                            :async-incremented b})
-;;                                 decremented
-;;                                 async-incremented)
-;;          out (signals/read-port combined)]
-;;      (async/pipe in wp)
-;;      (>! in 2)
-;;      (is (= {:decremented 1
-;;              :async-incremented 1}
-;;             (<! out)))
-;;      (is (= {:decremented 1
-;;              :async-incremented 3}
-;;             (<! out)))
-;;      (>! in 10)
-;;      (is (= {:decremented 9
-;;              :async-incremented 3}
-;;             (<! out)))
-;;      (is (= {:decremented 9
-;;              :async-incremented 11}
-;;             (<! out))))))
-;
-;(deftest-async test-constant
-;  (go
-;    (let [in (signals/write-port 0)
-;          foo (signals/constant :foo)
-;          combine (signals/lift vector in foo)
-;          out (-> combine
-;                  signals/compile-graph
-;                  signals/spawn
-;                  :output-channel)]
-;      (async/onto-chan in [1 2 3])
-;      (is (= [[0 :foo] [1 :foo] [2 :foo] [3 :foo]]
-;             (<! (async/into [] out)))))))
-;
+;      (is (= {:decremented 9
+;              :async-incremented 11}
+;             (<! out))))))
+
+(deftest-async test-constant
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 0 :numbers)
+          foo (signals/constant :foo)
+          combined (signals/lift vector in foo)
+          graph (signals/spawn combined)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= [0 :foo] (:init combined)))
+      (async/onto-chan graph (map number [1 2 3]))
+      (is (= [[1 :foo] [2 :foo] [3 :foo]]
+             (<! (async/into [] out)))))))
+
 ;(deftest-async test-merge
 ;  (go
 ;    (let [in1 (signals/write-port 0)

@@ -457,7 +457,7 @@
   (map->Signal {:init init
                 :message-emitter [source (fn [acc message]
                                            (if (fresh? message)
-                                             (->Fresh (f (:value message) acc))
+                                             (->Fresh (f (:value message) (:value acc)))
                                              (->Cached (:value acc))))]}))
 
 (defn reducep
@@ -478,6 +478,19 @@
                                            (when (fresh? message)
                                              (->Event topic (:value message))))]
                   :message-emitter [:events (event-relay topic)]})))
+
+(defn constant
+  [x]
+  (let [cached (->Cached x)]
+    (map->Signal {:init x
+                  :message-emitter [:events (constantly cached)]})))
+
+; helpers:
+
+(def fresh-values (comp (filter fresh?)
+                        (map :value)))
+
+; compiling graphs:
 
 (defn node-graph-zipper
   [output-node]
@@ -519,6 +532,18 @@
       kahn/kahn-sort
       reverse))
 
+
+(defrecord CompiledGraph
+  [output-signal sorted-signals])
+
+(defn compile-graph
+  [output-signal]
+  (let [sorted-signals (topsort output-signal)]
+    (->CompiledGraph output-signal sorted-signals)))
+
+
+; wiring up channels:
+
 (defn- tap-template
   [tmpl mult-map]
   (if (sequential? tmpl)
@@ -553,11 +578,35 @@
           {:events events-mult}
           sorted-signals))
 
+(defprotocol LiveChannelGraphProtocol
+  (output-mult [g])
+  (init [g]))
 
-(defrecord CompiledGraph
-  [output-signal sorted-signals])
+(defrecord LiveChannelGraph
+  [compiled-graph events-channel mult-map]
+  LiveChannelGraphProtocol
+  (output-mult [_] (get mult-map (:output-signal compiled-graph)))
+  impl/Channel
+  (close! [_] (impl/close! events-channel))
+  (closed? [_] (impl/closed? events-channel))
+  impl/WritePort
+  (put! [_ val fn1] (impl/put! events-channel val fn1))
+  async/Mult
+  (tap* [g ch close?] (async/tap* (output-mult g) ch close?))
+  (untap* [g ch] (async/untap* (output-mult g) ch))
+  (untap-all* [g] (async/untap-all* (output-mult g))))
 
-(defn compile-graph
-  [output-signal]
-  (let [sorted-signals (topsort output-signal)]
-    (->CompiledGraph output-signal sorted-signals)))
+(defprotocol Spawnable
+  (spawn [x]))
+
+(extend-protocol Spawnable
+  CompiledGraph
+  (spawn [g]
+    (let [events-channel (chan)
+          events-mult (async/mult events-channel)
+          mult-map (build-message-mult-map (:sorted-signals g) events-mult)]
+      (->LiveChannelGraph g events-channel mult-map))))
+
+(extend-protocol Spawnable
+  Signal
+  (spawn [s] (spawn (compile-graph s))))
