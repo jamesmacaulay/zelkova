@@ -223,6 +223,24 @@
       (is (= [[10 10] [30 30] [50 50]]
              (<! (async/into [] out)))))))
 
+(deftest-async test-transducep
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 10 :numbers)
+          odd-increments (signals/transducep (comp (map inc)
+                                                   (filter odd?))
+                                             conj
+                                             in)
+          graph (signals/spawn odd-increments)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= [] (:init odd-increments)))
+      (async/onto-chan graph (map number [20 21 22 23]))
+      (is (= [[21]
+              [21]
+              [21 23]
+              [21 23]]
+             (<! (async/into [] out)))))))
+
 (comment
   ; A little excercise to get a feel for how this might work...
   ; Here is Elm's Mario example, translated into a possible Clojure form from this version:

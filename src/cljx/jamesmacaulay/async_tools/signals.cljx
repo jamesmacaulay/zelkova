@@ -97,7 +97,7 @@
    (foldp (fn [val acc] (f acc val)) init source)))
 
 (defn transducep
-  ([xform f source] (transducep))
+  ([xform f source] (reducep (xform f) (f) source))
   ([xform f init source]
    (reducep (xform f) init source)))
 
