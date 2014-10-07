@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.7.0-alpha2"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
   :plugins [[lein-cljsbuild "1.0.3"]
-            [com.keminglabs/cljx "0.4.0"]
+            [com.keminglabs/cljx "0.4.0" :exclusions [org.clojure/clojure]]
             [com.cemerick/clojurescript.test "0.3.1"]
             [com.cemerick/austin "0.1.5"]]
   :jar-exclusions [#"\.cljx"]
