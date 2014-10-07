@@ -185,46 +185,43 @@
       (is (= [[1 :foo] [2 :foo] [3 :foo]]
              (<! (async/into [] out)))))))
 
-;(deftest-async test-merge
-;  (go
-;    (let [in1 (signals/write-port 0)
-;          in2 (signals/write-port 0)
-;          merged (signals/merge in1 in2)
-;          out (-> merged
-;                  signals/compile-graph
-;                  signals/spawn
-;                  :output-channel)]
-;      (is (= 0 (<! out)))
-;      (>! in1 1)
-;      (is (= 1 (<! out)))
-;      (>! in2 2)
-;      (is (= 2 (<! out)))
-;      (>! in1 3)
-;      (is (= 3 (<! out)))
-;      (async/close! in1)
-;      (async/close! in2))))
-;
-;(deftest-async test-sample-on
-;  (go
-;    (let [fake-mouse-position (signals/input [0 0] nil :mouse-position)
-;          fake-mouse-clicks (signals/input :click nil :mouse-clicks)
-;          graph (->> (signals/sample-on fake-mouse-clicks fake-mouse-position)
-;                     signals/compile-graph
-;                     signals/spawn)
-;          out (:output-channel graph)
-;          pos (partial signals/->Event :mouse-position)
-;          click (signals/->Event :mouse-clicks :click)]
-;      (async/onto-chan (:events-input graph)
-;                       [(pos [10 10])
-;                        click
-;                        (pos [20 20])
-;                        (pos [30 30])
-;                        click
-;                        (pos [40 40])
-;                        (pos [50 50])
-;                        click])
-;      (is (= [[0 0] [10 10] [30 30] [50 50]]
-;             (<! (async/into [] out)))))))
+(deftest-async test-merge
+  (go
+    (let [a (event-constructor :a)
+          b (event-constructor :b)
+          a-in (signals/input 10 :a)
+          b-in (signals/input 20 :b)
+          b-dec (signals/lift dec b-in)
+          b-inc (signals/lift inc b-in)
+          merged (signals/merge a-in b-dec b-in b-inc)
+          graph (signals/spawn merged)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= 10 (:init merged)))
+      (async/onto-chan graph [(a 20) (b 30) (a 40) (b 50)])
+      (is (= [20 29 40 49]
+             (<! (async/into [] out)))))))
+
+(deftest-async test-sample-on
+  (go
+    (let [pos (event-constructor :mouse-position)
+          click ((event-constructor :mouse-clicks) :click)
+          fake-mouse-position (signals/input [0 0] :mouse-position)
+          fake-mouse-clicks (signals/input :click :mouse-clicks)
+          sampled (signals/sample-on fake-mouse-clicks fake-mouse-position)
+          graph (signals/spawn sampled)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= [0 0] (:init sampled)))
+      (async/onto-chan graph
+                       [(pos [10 10])
+                        click
+                        (pos [20 20])
+                        (pos [30 30])
+                        click
+                        (pos [40 40])
+                        (pos [50 50])
+                        click])
+      (is (= [[10 10] [30 30] [50 50]]
+             (<! (async/into [] out)))))))
 
 (comment
   ; A little excercise to get a feel for how this might work...

@@ -485,6 +485,22 @@
     (map->Signal {:init x
                   :message-emitter [:events (constantly cached)]})))
 
+(defn merge
+  [& sigs]
+  (map->Signal {:init (:init (first sigs))
+                :message-emitter [sigs (fn [prev messages]
+                                         (or (first (filter fresh? messages))
+                                             (->Cached (:value prev))))]}))
+
+(defn sample-on
+  [sampler-sig value-sig]
+  (map->Signal {:init (:init value-sig)
+                :message-emitter [[sampler-sig value-sig]
+                                  (fn [prev [sampler-msg value-msg]]
+                                    (if (fresh? sampler-msg)
+                                      (->Fresh (:value value-msg))
+                                      (->Cached (:value prev))))]}))
+
 ; helpers:
 
 (def fresh-values (comp (filter fresh?)
@@ -605,8 +621,6 @@
     (let [events-channel (chan)
           events-mult (async/mult events-channel)
           mult-map (build-message-mult-map (:sorted-signals g) events-mult)]
-      (->LiveChannelGraph g events-channel mult-map))))
-
-(extend-protocol Spawnable
+      (->LiveChannelGraph g events-channel mult-map)))
   Signal
   (spawn [s] (spawn (compile-graph s))))
