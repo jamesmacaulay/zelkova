@@ -1,6 +1,6 @@
 #+clj
 (ns jamesmacaulay.async-tools.signals
-  (:refer-clojure :exclude [merge])
+  (:refer-clojure :exclude [merge count])
   (:require [clojure.core :as core]
             [clojure.zip :as zip]
             [clojure.core.async :as async :refer [go go-loop chan <! >!]]
@@ -131,6 +131,35 @@
                                     (if (fresh? sampler-msg)
                                       (->Fresh (:value value-msg))
                                       (->Cached (:value prev))))]}))
+
+(defn count
+  [sig]
+  (foldp #(inc %2) 0 sig))
+
+(defn count-if
+  [pred sig]
+  (foldp (fn [v c]
+           (if (pred v) (inc c) c))
+         0
+         sig))
+
+(defn keep-if
+  [pred false-init sig]
+  (map->Signal {:init (if (pred (:init sig))
+                        (:init sig)
+                        false-init)
+                :message-emitter [sig (fn [prev msg]
+                                        (if (and (fresh? msg)
+                                                 (pred (:value msg)))
+                                          (->Fresh (:value msg))
+                                          (->Cached (:value prev))))]}))
+
+(defn keep-when
+  [switch-sig false-init value-sig]
+  (->> value-sig
+       (lift vector (sample-on value-sig switch-sig))
+       (keep-if first [false, false-init])
+       (lift second)))
 
 ; helpers:
 

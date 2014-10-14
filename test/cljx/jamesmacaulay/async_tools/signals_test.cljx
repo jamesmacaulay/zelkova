@@ -241,6 +241,90 @@
               [21 23]]
              (<! (async/into [] out)))))))
 
+(deftest-async test-count
+  (go
+    (let [in1-event (event-constructor :in1)
+          in2-event (event-constructor :in2)
+          in1 (signals/input 1 :in1)
+          in2 (signals/input 1 :in2)
+          count1 (signals/count in1)
+          combined (signals/lift vector count1 in1 in2)
+          graph (signals/spawn combined)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= 0 (:init count1)))
+      (is (= [0 1 1] (:init combined)))
+      (async/onto-chan graph [(in1-event 2)
+                              (in1-event 3)
+                              (in2-event 2)
+                              (in1-event 4)])
+      (is (= [[1 2 1]
+              [2 3 1]
+              [2 3 2]
+              [3 4 2]]
+             (<! (async/into [] out)))))))
+
+(deftest-async test-count-if
+  (go
+    (let [in1-event (event-constructor :in1)
+          in2-event (event-constructor :in2)
+          in1 (signals/input 1 :in1)
+          in2 (signals/input 1 :in2)
+          count1-odd (signals/count-if odd? in1)
+          combined (signals/lift vector count1-odd in1 in2)
+          graph (signals/spawn combined)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= 0 (:init count1-odd)))
+      (async/onto-chan graph [(in1-event 2)
+                              (in1-event 3)
+                              (in2-event 2)
+                              (in1-event 4)
+                              (in1-event 5)])
+      (is (= [[0 2 1]
+              [1 3 1]
+              [1 3 2]
+              [1 4 2]
+              [2 5 2]]
+             (<! (async/into [] out)))))))
+
+(deftest-async test-keep-if
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 0 :numbers)
+          oddnums (signals/keep-if odd? -1 in)
+          count-odd (signals/count oddnums)
+          evennums (signals/keep-if even? -2 in)
+          count-even (signals/count evennums)
+          combined (signals/lift vector oddnums count-odd evennums count-even)
+          graph (signals/spawn combined)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= [-1 0 0 0] (:init combined)))
+      (async/onto-chan graph (map number [1 2 3]))
+      (is (= [[1 1 0 0]
+              [1 1 2 1]
+              [3 2 2 1]]
+             (<! (async/into [] out)))))))
+
+(deftest-async test-keep-when
+  (go
+    (let [number (event-constructor :numbers)
+          letter (event-constructor :letters)
+          numbers-in (signals/input 0 :numbers)
+          letters-in (signals/input :a :letters)
+          odd-kept-letters (signals/keep-when (signals/lift odd? numbers-in) :false-init letters-in)
+          graph (signals/spawn odd-kept-letters)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= :false-init (:init odd-kept-letters)))
+      (is (= :a (:init (signals/keep-when (signals/lift even? numbers-in) :z letters-in))))
+      (async/onto-chan graph [(letter :b)
+                              (number 1)
+                              (letter :c)
+                              (number 2)
+                              (letter :d)
+                              (letter :e)
+                              (number 3)
+                              (letter :f)])
+      (is (= [:c :f] (<! (async/into [] out)))))))
+
 (comment
   ; A little excercise to get a feel for how this might work...
   ; Here is Elm's Mario example, translated into a possible Clojure form from this version:
