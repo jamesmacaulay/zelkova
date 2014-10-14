@@ -161,6 +161,15 @@
        (keep-if first [false, false-init])
        (lift second)))
 
+(defn drop-repeats
+  [sig]
+  (map->Signal {:init (:init sig)
+                :message-emitter [sig (fn [prev msg]
+                                        (if (and (fresh? msg)
+                                                 (not= (:value msg) (:value prev)))
+                                          msg
+                                          (->Cached (:value prev))))]}))
+
 ; helpers:
 
 (def fresh-values (comp (filter fresh?)

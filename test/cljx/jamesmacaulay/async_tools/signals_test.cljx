@@ -325,6 +325,17 @@
                               (letter :f)])
       (is (= [:c :f] (<! (async/into [] out)))))))
 
+(deftest-async test-drop-repeats
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 0 :numbers)
+          no-repeats (signals/drop-repeats in)
+          graph (signals/spawn no-repeats)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= 0 (:init no-repeats)))
+      (async/onto-chan graph (map number [1 1 2 1 2 2 2 1 1]))
+      (is (= [1 2 1 2 1] (<! (async/into [] out)))))))
+
 (comment
   ; A little excercise to get a feel for how this might work...
   ; Here is Elm's Mario example, translated into a possible Clojure form from this version:
