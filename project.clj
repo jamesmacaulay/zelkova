@@ -17,17 +17,18 @@
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.5"]
                                   [org.clojure/tools.nrepl "0.2.4"]
-                                  [org.clojure/clojurescript "0.0-2356"]]}
-             :repl [:dev {:source-paths ["repl" "target/generated/src/clj" "target/generated/src/cljs" "target/generated/test/clj" "target/generated/test/cljs"]
+                                  [org.clojure/clojurescript "0.0-2356"]]
+                   :source-paths ["target/classes"]}
+             :repl [:dev {:source-paths ["repl" "target/classes" "target/generated/test/clj" "target/generated/test/cljs"]
                           :test-paths ["target/generated/test/clj" "target/generated/test/cljs"]}]
-             :clj [:dev {:source-paths ["target/generated/src/clj"]
+             :clj [:dev {:source-paths ["target/classes"]
                          :test-paths ["target/generated/test/clj"]}]
              :cljs [:dev]}
   :hooks [cljx.hooks]
   :cljsbuild {:test-commands {"phantom" ["phantomjs" :runner "target/testable.js"]
                               "node" ["node" :node-runner "target/testable.js"]}
               :builds [{:id "test"
-                        :source-paths ["target/generated/src/clj" "target/generated/src/cljs" "target/generated/test/clj" "target/generated/test/cljs"]
+                        :source-paths ["target/classes" "target/generated/test/clj" "target/generated/test/cljs"]
                         :notify-command ["phantomjs" :cljs.test/runner "target/testable.js"]
                         :compiler {:output-to "target/testable.js"
                                    :libs [""]
@@ -36,10 +37,10 @@
                                    :optimizations :simple
                                    :pretty-print true}}]}
   :cljx {:builds [{:source-paths ["src/cljx"]
-                   :output-path "target/generated/src/clj"
+                   :output-path "target/classes"
                    :rules :clj}
                   {:source-paths ["src/cljx"]
-                   :output-path "target/generated/src/cljs"
+                   :output-path "target/classes"
                    :rules :cljs}
                   {:source-paths ["test/cljx"]
                    :output-path "target/generated/test/clj"
