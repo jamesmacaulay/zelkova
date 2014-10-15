@@ -71,17 +71,29 @@
    (map->Signal {:init init
                  :message-emitter [:events (event-relay topic)]})))
 
+(defn constant
+  [x]
+  (let [cached (->Cached x)]
+    (map->Signal {:init x
+                  :message-emitter [:events (constantly cached)]})))
+
+(defn liftseq
+  [f sources]
+  (if (empty? sources)
+    (constant (f))
+    (let [emit-message (fn [prev messages]
+                         (if (some fresh? messages)
+                           (->Fresh (apply f (mapv :value messages)))
+                           (->Cached (:value prev))))]
+      (map->Signal {:init (->> sources
+                               (mapv (comp ->Fresh :init))
+                               (emit-message nil)
+                               :value)
+                    :message-emitter [sources emit-message]}))))
+
 (defn lift
   [f & sources]
-  (let [emit-message (fn [prev messages]
-                       (if (some fresh? messages)
-                         (->Fresh (apply f (mapv :value messages)))
-                         (->Cached (:value prev))))]
-    (map->Signal {:init (->> sources
-                             (mapv (comp ->Fresh :init))
-                             (emit-message nil)
-                             :value)
-                  :message-emitter [sources emit-message]})))
+  (liftseq f sources))
 
 (defn foldp
   [f init source]
@@ -110,18 +122,20 @@
                                              (->Event topic (:value message))))]
                   :message-emitter [:events (event-relay topic)]})))
 
-(defn constant
-  [x]
-  (let [cached (->Cached x)]
-    (map->Signal {:init x
-                  :message-emitter [:events (constantly cached)]})))
-
-(defn merge
-  [& sigs]
+(defn mergeseq
+  [sigs]
   (map->Signal {:init (:init (first sigs))
                 :message-emitter [sigs (fn [prev messages]
                                          (or (first (filter fresh? messages))
                                              (->Cached (:value prev))))]}))
+
+(defn merge
+  [& sigs]
+  (mergeseq sigs))
+
+(defn combine
+  [sigs]
+  (liftseq vector sigs))
 
 (defn sample-on
   [sampler-sig value-sig]
@@ -144,22 +158,30 @@
          sig))
 
 (defn keep-if
-  [pred false-init sig]
+  [pred base sig]
   (map->Signal {:init (if (pred (:init sig))
                         (:init sig)
-                        false-init)
+                        base)
                 :message-emitter [sig (fn [prev msg]
                                         (if (and (fresh? msg)
                                                  (pred (:value msg)))
                                           (->Fresh (:value msg))
                                           (->Cached (:value prev))))]}))
 
+(defn drop-if
+  [pred base sig]
+  (keep-if (complement pred) base sig))
+
 (defn keep-when
-  [switch-sig false-init value-sig]
+  [switch-sig base value-sig]
   (->> value-sig
        (lift vector (sample-on value-sig switch-sig))
-       (keep-if first [false false-init])
+       (keep-if first [false base])
        (lift second)))
+
+(defn drop-when
+  [switch-sig base value-sig]
+  (keep-when (lift not switch-sig) base value-sig))
 
 (defn drop-repeats
   [sig]

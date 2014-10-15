@@ -111,7 +111,11 @@
       (is (= 0 (:init summed)))
       (async/onto-chan graph [(a 1) (b 2) (c 3) (a 10)])
       (is (= [1 3 6 15]
-             (<! (async/into [] out)))))))
+             (<! (async/into [] out)))))
+    (let [zero-arity-+-lift (signals/lift +)
+          zero-arity-vector-lift (signals/lift vector)]
+      (is (= 0 (:init zero-arity-+-lift)))
+      (is (= [] (:init zero-arity-vector-lift))))))
 
 (deftest-async test-foldp
   (go
@@ -200,6 +204,22 @@
       (async/onto-chan graph [(a 20) (b 30) (a 40) (b 50)])
       (is (= [20 29 40 49]
              (<! (async/into [] out)))))))
+
+(deftest-async test-combine
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 0 :numbers)
+          inc'd (signals/lift inc in)
+          combined (signals/combine [in inc'd])
+          graph (signals/spawn combined)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (is (= [0 1] (:init combined)))
+      (async/onto-chan graph (map number [1 2]))
+      (is (= [[1 2] [2 3]]
+             (<! (async/into [] out)))))
+    (let [empty-combined (signals/combine [])]
+      (is (= [] (:init empty-combined))))))
+
 
 (deftest-async test-sample-on
   (go
