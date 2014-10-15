@@ -158,7 +158,7 @@
   [switch-sig false-init value-sig]
   (->> value-sig
        (lift vector (sample-on value-sig switch-sig))
-       (keep-if first [false, false-init])
+       (keep-if first [false false-init])
        (lift second)))
 
 (defn drop-repeats
