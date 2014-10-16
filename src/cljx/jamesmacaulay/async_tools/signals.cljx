@@ -42,23 +42,36 @@
   (fresh? [_] false))
 
 (defprotocol SignalProtocol
-  (sources [s]))
+  (sources [s])
+  (message-emitter [s]))
 
 (defn signal?
   [x]
   (satisfies? SignalProtocol x))
 
+(defn- subscribed-topics-message-emitter
+  [topics]
+  (let [topics (if (set? topics) topics (set topics))]
+    (fn [prev event]
+      (if (contains? topics (:topic event))
+        (->Fresh (:value event))
+        (->Cached (:value prev))))))
+
 (defrecord Signal
-  [init message-emitter event-emitter]
+  [init message-emitter subscribed-topics event-emitter external-event-source]
   SignalProtocol
   (sources [_]
     (into #{}
           (comp (filter identity)
                 (mapcat (comp flatten vector first))
                 (filter signal?))
-          [message-emitter event-emitter])))
+          [message-emitter event-emitter]))
+  (message-emitter [_]
+    (cond
+      message-emitter message-emitter
+      subscribed-topics [:events (subscribed-topics-message-emitter subscribed-topics)])))
 
-(defn- event-relay
+(defn- messages-from-events
   [topic]
   (fn [prev event]
     (if (= topic (:topic event))
@@ -69,7 +82,7 @@
   ([init] (input init (gen-topic)))
   ([init topic]
    (map->Signal {:init init
-                 :message-emitter [:events (event-relay topic)]})))
+                 :subscribed-topics #{topic}})))
 
 (defn constant
   [x]
@@ -127,12 +140,12 @@
 
 (defn async
   [source]
-  (let [topic (gen-topic)]
+  (let [topic source]
     (map->Signal {:init (:init source)
                   :event-emitter [source (fn [message]
                                            (when (fresh? message)
-                                             (->Event topic (:value message))))]
-                  :message-emitter [:events (event-relay topic)]})))
+                                             (:value message)))]
+                  :subscribed-topics #{topic}})))
 
 (defn mergeseq
   [sigs]
@@ -274,7 +287,7 @@
 
 (defn- build-message-mult
   [signal mult-map]
-  (if-let [[tmpl msg-fn] (:message-emitter signal)]
+  (if-let [[tmpl msg-fn] (message-emitter signal)]
     (let [c-in (tap-template tmpl mult-map)
           c-out (chan)]
       (spawn-message-loop! (:init signal) msg-fn c-in c-out)
