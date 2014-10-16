@@ -256,8 +256,6 @@
       (is (= [] (:init odd-increments)))
       (async/onto-chan graph (map number [20 21 22 23]))
       (is (= [[21]
-              [21]
-              [21 23]
               [21 23]]
              (<! (async/into [] out)))))))
 

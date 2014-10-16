@@ -103,10 +103,22 @@
                                              (->Fresh (f (:value message) (:value acc)))
                                              (->Cached (:value acc))))]}))
 
+(defn drop-repeats
+  [sig]
+  (map->Signal {:init (:init sig)
+                :message-emitter [sig (fn [prev msg]
+                                        (if (and (fresh? msg)
+                                                 (not= (:value msg) (:value prev)))
+                                          msg
+                                          (->Cached (:value prev))))]}))
+
+
 (defn reducep
   ([f source] (reducep f (f) source))
   ([f init source]
-   (foldp (fn [val acc] (f acc val)) init source)))
+   (->> source
+        (foldp (fn [val acc] (f acc val)) init)
+        drop-repeats)))
 
 (defn transducep
   ([xform f source] (reducep (xform f) (f) source))
@@ -182,15 +194,6 @@
 (defn drop-when
   [switch-sig base value-sig]
   (keep-when (lift not switch-sig) base value-sig))
-
-(defn drop-repeats
-  [sig]
-  (map->Signal {:init (:init sig)
-                :message-emitter [sig (fn [prev msg]
-                                        (if (and (fresh? msg)
-                                                 (not= (:value msg) (:value prev)))
-                                          msg
-                                          (->Cached (:value prev))))]}))
 
 ; helpers:
 
