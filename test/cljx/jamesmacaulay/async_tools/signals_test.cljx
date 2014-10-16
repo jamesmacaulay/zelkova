@@ -148,34 +148,6 @@
                :incremented 11}]
              (<! (async/into [] out)))))))
 
-;(deftest-async test-async-makes-signals-asynchronous
-;  (go
-;    (let [in (chan 1000)
-;          wp (signals/write-port 0)
-;          decremented (signals/lift dec wp)
-;          incremented (signals/lift inc wp)
-;          async-incremented (signals/async incremented)
-;          combined (signals/lift (fn [a b] {:decremented a
-;                                            :async-incremented b})
-;                                 decremented
-;                                 async-incremented)
-;          out (signals/read-port combined)]
-;      (async/pipe in wp)
-;      (>! in 2)
-;      (is (= {:decremented 1
-;              :async-incremented 1}
-;             (<! out)))
-;      (is (= {:decremented 1
-;              :async-incremented 3}
-;             (<! out)))
-;      (>! in 10)
-;      (is (= {:decremented 9
-;              :async-incremented 3}
-;             (<! out)))
-;      (is (= {:decremented 9
-;              :async-incremented 11}
-;             (<! out))))))
-
 (deftest-async test-constant
   (go
     (let [number (event-constructor :numbers)
@@ -367,6 +339,27 @@
       (signals/connect-to-world graph nil)
       (is (= [[10 10] [20 20] [30 30]]
              (<! (async/into [] out)))))))
+
+(deftest-async test-async-makes-signals-asynchronous
+  (go
+    (let [number (event-constructor :numbers)
+          in (signals/input 0 :numbers)
+          decremented (signals/lift dec in)
+          incremented (signals/lift inc in)
+          async-incremented (signals/async incremented)
+          combined (signals/combine [decremented async-incremented])
+          graph (signals/spawn combined)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (signals/connect-to-world graph nil)
+      (is (= [-1 1] (:init combined)))
+      (>! graph (number 1))
+      (is (= [0 1] (<! out)))
+      (is (= [0 2] (<! out)))
+      (>! graph (number 2))
+      (is (= [1 2] (<! out)))
+      (is (= [1 3] (<! out)))
+      (async/close! graph)
+      (is (= nil (<! out))))))
 
 (comment
   ; A little excercise to get a feel for how this might work...
