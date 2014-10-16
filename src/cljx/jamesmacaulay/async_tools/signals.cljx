@@ -62,12 +62,9 @@
   SignalProtocol
   (sources [_]
     (or deps
-        (->> message-emitter
-             first
-             vector
-             flatten
-             (filter signal?)
-             (into #{}))))
+        (let [tmpl (first message-emitter)
+              tmpl-seq (if (sequential? tmpl) tmpl (vector tmpl))]
+          (into #{} (filter signal?) tmpl-seq))))
   (message-emitter [_]
     (cond
       message-emitter message-emitter
@@ -308,14 +305,23 @@
           {:events events-mult}
           sorted-signals))
 
+(defn gather-event-sources
+  [sorted-signals]
+  (into {} (map :event-sources) sorted-signals))
+
 (defprotocol LiveChannelGraphProtocol
   (output-mult [g])
-  (init [g]))
+  (connect-to-world [g opts]))
 
 (defrecord LiveChannelGraph
   [compiled-graph events-channel mult-map]
   LiveChannelGraphProtocol
   (output-mult [_] (get mult-map (:output-signal compiled-graph)))
+  (connect-to-world [g opts]
+    (let [world (gather-event-sources (:sorted-signals compiled-graph))]
+      (doseq [channel-fn (vals world)]
+        (async/pipe (channel-fn g opts)
+                    events-channel))))
   impl/Channel
   (close! [_] (impl/close! events-channel))
   (closed? [_] (impl/closed? events-channel))

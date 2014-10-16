@@ -354,6 +354,20 @@
       (async/onto-chan graph (map number [1 1 2 1 2 2 2 1 1]))
       (is (= [1 2 1 2 1] (<! (async/into [] out)))))))
 
+(deftest-async test-world-building
+  (go
+    (let [pos (event-constructor :mouse-position)
+          event-source (async/to-chan (map pos [[10 10]
+                                                [20 20]
+                                                [30 30]]))
+          mouse-position (assoc (signals/input [0 0] :mouse-position)
+                           :event-sources {:mouse-position (constantly event-source)})
+          graph (signals/spawn mouse-position)
+          out (async/tap graph (chan 1 signals/fresh-values))]
+      (signals/connect-to-world graph nil)
+      (is (= [[10 10] [20 20] [30 30]]
+             (<! (async/into [] out)))))))
+
 (comment
   ; A little excercise to get a feel for how this might work...
   ; Here is Elm's Mario example, translated into a possible Clojure form from this version:
