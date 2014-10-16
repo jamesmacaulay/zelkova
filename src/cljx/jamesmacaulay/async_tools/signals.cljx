@@ -49,7 +49,7 @@
   [x]
   (satisfies? SignalProtocol x))
 
-(defn- subscribed-topics-message-emitter
+(defn- relayed-events-message-emitter
   [topics]
   (let [topics (if (set? topics) topics (set topics))]
     (fn [prev event]
@@ -58,18 +58,20 @@
         (->Cached (:value prev))))))
 
 (defrecord Signal
-  [init message-emitter subscribed-topics event-emitter external-event-source]
+  [init message-emitter relayed-events deps event-sources]
   SignalProtocol
   (sources [_]
-    (into #{}
-          (comp (filter identity)
-                (mapcat (comp flatten vector first))
-                (filter signal?))
-          [message-emitter event-emitter]))
+    (or deps
+        (->> message-emitter
+             first
+             vector
+             flatten
+             (filter signal?)
+             (into #{}))))
   (message-emitter [_]
     (cond
       message-emitter message-emitter
-      subscribed-topics [:events (subscribed-topics-message-emitter subscribed-topics)])))
+      relayed-events [:events (relayed-events-message-emitter relayed-events)])))
 
 (defn- messages-from-events
   [topic]
@@ -82,7 +84,7 @@
   ([init] (input init (gen-topic)))
   ([init topic]
    (map->Signal {:init init
-                 :subscribed-topics #{topic}})))
+                 :relayed-events #{topic}})))
 
 (defn constant
   [x]
@@ -140,12 +142,17 @@
 
 (defn async
   [source]
-  (let [topic source]
+  (let [topic source
+        msgs->events (comp (filter fresh?)
+                           (map (fn [msg]
+                                  (->Event topic (:value msg)))))
+        events-channel-fn (fn [live-graph _]
+                            (async/tap (get (:mult-map live-graph) source)
+                                       (chan 1 msgs->events)))]
     (map->Signal {:init (:init source)
-                  :event-emitter [source (fn [message]
-                                           (when (fresh? message)
-                                             (:value message)))]
-                  :subscribed-topics #{topic}})))
+                  :deps #{source}
+                  :event-sources {topic events-channel-fn}
+                  :relayed-events #{topic}})))
 
 (defn mergeseq
   [sigs]
