@@ -9,19 +9,19 @@
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 #+cljs
-(defn- listen [el type]
-  (let [out (async/chan)]
-    (events/listen el type
-                   (fn [e] (async/put! out e)))
+(defn- listen
+  [el type & args]
+  (let [out (apply async/chan 1 args)]
+    (events/listen el type (fn [e] (async/put! out e)))
     out))
 
 #+cljs
 (defn position-channel
   [graph opts]
-  (let [dom-events (listen js/document "mousemove")
-        xform (comp (map (fn [e] [(.-offsetX e) (.-offsetY e)]))
-                    (map (partial z/->Event ::position)))]
-    (async/pipe dom-events (async/chan 1 xform))))
+  (listen js/document
+          "mousemove"
+          (comp (map (fn [e] [(.-offsetX e) (.-offsetY e)]))
+                (map (partial z/->Event ::position)))))
 
 #+cljs
 (def position (assoc (z/input [0 0] ::position)
@@ -36,10 +36,10 @@
 #+cljs
 (defn clicks-channel
   [graph opts]
-  (let [dom-events (listen js/document "click")
-        xform (comp (map (constantly :click))
-                    (map (partial z/->Event ::clicks)))]
-    (async/pipe dom-events (async/chan 1 xform))))
+  (listen js/document
+          "click"
+          (comp (map (constantly :click))
+                (map (partial z/->Event ::clicks)))))
 
 #+cljs
 (def clicks (assoc (z/input :click ::clicks)
