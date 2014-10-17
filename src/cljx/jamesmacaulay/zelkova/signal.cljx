@@ -107,6 +107,13 @@
   [f & sources]
   (liftseq f sources))
 
+(defn template
+  [signal-map]
+  (let [ks (keys signal-map)]
+    (liftseq (fn [& values]
+               (zipmap ks values))
+             (vals signal-map))))
+
 (defn foldp
   [f init source]
   (map->Signal {:init init

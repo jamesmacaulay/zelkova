@@ -360,6 +360,12 @@
       (async/close! graph)
       (is (= nil (<! out))))))
 
+(deftest test-template
+  (let [tmpl (z/template {:a (z/input 1 :a)
+                          :b (z/input 2 :b)})]
+    (is (= {:a 1 :b 2}
+           (:init tmpl)))))
+
 (comment
   ; A little excercise to get a feel for how this might work...
   ; Here is Elm's Mario example, translated into a possible Clojure form from this version:
