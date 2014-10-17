@@ -44,3 +44,14 @@
 #+cljs
 (def clicks (assoc (z/input :click ::clicks)
               :event-sources {::clicks clicks-channel}))
+
+#+cljs
+(defn down?-channel
+  [graph opts]
+  (let [down-events (listen js/document "mousedown" (map (constantly (z/->Event ::down? true))))
+        up-events (listen js/document "mouseup" (map (constantly (z/->Event ::down? false))))]
+    (async/merge [down-events up-events])))
+
+#+cljs
+(def down? (assoc (z/input false ::down?)
+             :event-sources {::down? down?-channel}))
