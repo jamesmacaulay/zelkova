@@ -1,12 +1,24 @@
 #+clj
-(ns jamesmacaulay.zelkova.time)
+(ns jamesmacaulay.zelkova.time
+  (:refer-clojure :exclude [second]))
 
 #+cljs
 (ns jamesmacaulay.zelkova.time
+  (:refer-clojure :exclude [second])
   (:require [jamesmacaulay.zelkova.signal :as z]
             [goog.events :as events]
             [cljs.core.async :as async :refer [>! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
+
+(def millisecond 1)
+(def second 1000)
+(def minute (* 60 second))
+(def hour (* 60 minute))
+
+(defn in-milliseconds [n] (/ n millisecond))
+(defn in-seconds [n] (/ n second))
+(defn in-minutes [n] (/ n minute))
+(defn in-hours [n] (/ n hour))
 
 #+cljs
 (defn- listen
