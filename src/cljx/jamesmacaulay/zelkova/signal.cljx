@@ -1,5 +1,5 @@
 #+clj
-(ns jamesmacaulay.async-tools.signals
+(ns jamesmacaulay.zelkova.signal
   (:refer-clojure :exclude [merge count])
   (:require [clojure.core :as core]
             [clojure.zip :as zip]
@@ -10,7 +10,7 @@
             [alandipert.kahn :as kahn]))
 
 #+cljs
-(ns jamesmacaulay.async-tools.signals
+(ns jamesmacaulay.zelkova.signal
   (:refer-clojure :exclude [merge])
   (:require [cljs.core :as core]
             [clojure.zip :as zip]

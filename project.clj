@@ -1,6 +1,6 @@
-(defproject jamesmacaulay/async-tools "0.1.0-SNAPSHOT"
-  :description "Tools for core.async"
-  :url "http://github.com/jamesmacaulay/async-tools"
+(defproject jamesmacaulay/zelkova "0.1.0-SNAPSHOT"
+  :description "Elm-style FRP for Clojure and ClojureScript"
+  :url "http://github.com/jamesmacaulay/zelkova"
   :license {:name "MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.7.0-alpha2"]
@@ -17,7 +17,9 @@
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.5"]
                                   [org.clojure/tools.nrepl "0.2.4"]
-                                  [org.clojure/clojurescript "0.0-2356"]]
+                                  [org.clojure/clojurescript "0.0-2356"]
+                                  [com.cemerick/clojurescript.test "0.3.1"]
+                                  [com.cemerick/austin "0.1.5"]]
                    :source-paths ["target/classes"]}
              :repl [:dev {:source-paths ["repl" "target/classes" "target/generated/test/clj" "target/generated/test/cljs"]
                           :test-paths ["target/generated/test/clj" "target/generated/test/cljs"]}]
