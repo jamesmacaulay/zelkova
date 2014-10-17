@@ -11,7 +11,7 @@
 
 #+cljs
 (ns jamesmacaulay.zelkova.signal
-  (:refer-clojure :exclude [merge])
+  (:refer-clojure :exclude [merge count])
   (:require [cljs.core :as core]
             [clojure.zip :as zip]
             [cljs.core.async :as async :refer [chan <! >!]]
