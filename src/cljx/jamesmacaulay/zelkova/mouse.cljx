@@ -36,5 +36,5 @@
     (async/pipe dom-events (async/chan 1 xform))))
 
 #+cljs
-(def clicks (assoc (z/input [0 0] ::clicks)
+(def clicks (assoc (z/input :click ::clicks)
               :event-sources {::clicks clicks-channel}))
