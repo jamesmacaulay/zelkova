@@ -28,6 +28,12 @@
                 :event-sources {::position position-channel}))
 
 #+cljs
+(def x (z/lift first position))
+
+#+cljs
+(def y (z/lift second position))
+
+#+cljs
 (defn clicks-channel
   [graph opts]
   (let [dom-events (listen js/document "click")
