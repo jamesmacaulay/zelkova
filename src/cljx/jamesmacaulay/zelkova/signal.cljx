@@ -259,7 +259,6 @@
       kahn/kahn-sort
       reverse))
 
-
 (defrecord CompiledGraph
   [output-signal sorted-signals])
 
@@ -321,7 +320,8 @@
     (let [world (gather-event-sources (:sorted-signals compiled-graph))]
       (doseq [channel-fn (vals world)]
         (async/pipe (channel-fn g opts)
-                    events-channel))))
+                    events-channel)))
+    g)
   impl/Channel
   (close! [_] (impl/close! events-channel))
   (closed? [_] (impl/closed? events-channel))
