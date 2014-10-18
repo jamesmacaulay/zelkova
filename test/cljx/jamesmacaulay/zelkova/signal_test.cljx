@@ -335,7 +335,6 @@
                            :event-sources {:mouse-position (constantly event-source)})
           graph (z/spawn mouse-position)
           out (async/tap graph (chan 1 z/fresh-values))]
-      (z/connect-to-world graph nil)
       (is (= [[10 10] [20 20] [30 30]]
              (<! (async/into [] out)))))))
 
@@ -349,7 +348,6 @@
           combined (z/combine [decremented async-incremented])
           graph (z/spawn combined)
           out (async/tap graph (chan 1 z/fresh-values))]
-      (z/connect-to-world graph nil)
       (is (= [-1 1] (:init combined)))
       (>! graph (number 1))
       (is (= [0 1] (<! out)))

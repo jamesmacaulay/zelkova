@@ -339,15 +339,47 @@
   (untap* [g ch] (async/untap* (output-mult g) ch))
   (untap-all* [g] (async/untap-all* (output-mult g))))
 
-(defprotocol Spawnable
-  (spawn [x]))
+(defprotocol SignalLike
+  (init [x])
+  (spawn* [x opts])
+  (pipe-to-atom* [x a ks]))
 
-(extend-protocol Spawnable
+(extend-protocol SignalLike
+  LiveChannelGraph
+  (init [g] (init (:compiled-graph g)))
+  (spawn* [g opts] (spawn* (:compiled-graph g) opts))
+  (pipe-to-atom* [g atm ks]
+    (tools/do-effects (if (seq ks)
+                        (partial swap! atm assoc-in ks)
+                        (partial reset! atm))
+                      (async/tap g (async/chan 1 fresh-values)))
+    atm)
   CompiledGraph
-  (spawn [g]
+  (init [g] (:init (:output-signal g)))
+  (spawn* [g opts]
     (let [events-channel (chan)
           events-mult (async/mult events-channel)
           mult-map (build-message-mult-map (:sorted-signals g) events-mult)]
-      (->LiveChannelGraph g events-channel mult-map)))
+      (-> g
+          (->LiveChannelGraph events-channel mult-map)
+          (connect-to-world opts))))
+  (pipe-to-atom* [g atm ks]
+    (pipe-to-atom* (spawn* g nil) atm ks))
   Signal
-  (spawn [s] (spawn (compile-graph s))))
+  (init [s] (:init s))
+  (spawn* [s opts] (spawn* (compile-graph s) opts))
+  (pipe-to-atom* [s atm ks]
+    (pipe-to-atom* (spawn* s nil) atm ks)))
+
+(defn spawn
+  ([g] (spawn* g nil))
+  ([g opts] (spawn* g opts)))
+
+(defn pipe-to-atom
+  ([x]
+   (let [live-graph (spawn x)]
+     (pipe-to-atom live-graph
+                   (atom (init live-graph)
+                         :meta {::source live-graph}))))
+  ([x atm] (pipe-to-atom* x atm nil))
+  ([x atm ks] (pipe-to-atom* x atm ks)))
