@@ -175,9 +175,9 @@
                               :-moz-user-select "none"
                               :-ms-user-select "none"
                               :user-select "none"}}
-             (apply dom/div #js {:class "placed-boxes"}
+             (apply dom/div #js {:className "placed-boxes"}
                     (map render-solid-box (:placed-boxes state)))
-             (apply dom/div #js {:class "moving-boxes"}
+             (apply dom/div #js {:className "moving-boxes"}
                     (map render-ghost-box moving-boxes))
              (render-ghost-box resizing-box)
              (dom/div #js {:style #js {:position "relative"}}
