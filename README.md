@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/jamesmacaulay/zelkova.svg)](https://travis-ci.org/jamesmacaulay/zelkova)
 
-Elm-style FRP for Clojure and ClojureScript.
+[Elm](http://elm-lang.org/)-style FRP for Clojure and ClojureScript.
 
 ## Examples
 
