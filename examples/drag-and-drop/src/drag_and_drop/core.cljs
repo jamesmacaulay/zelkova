@@ -175,20 +175,20 @@
                               :-moz-user-select "none"
                               :-ms-user-select "none"
                               :user-select "none"}}
-             (apply dom/div #js {:className "placed-boxes"}
-                    (map render-solid-box (:placed-boxes state)))
-             (apply dom/div #js {:className "moving-boxes"}
-                    (map render-ghost-box moving-boxes))
-             (render-ghost-box resizing-box)
-             (dom/div #js {:style #js {:position "relative"}}
-                      (dom/h1 nil "Drag and drop")
-                      (dom/p nil
-                             (dom/a #js {:href "https://github.com/jamesmacaulay/zelkova/blob/gh-pages/examples/drag-and-drop/src/drag_and_drop/core.cljs"}
-                                    "View source")
-                             ".")
-                      (dom/p nil
-                             "Drag to create boxes, drag to move them around, and click to remove them.")
-                      (dom/pre nil (.stringify js/JSON (clj->js state) nil 2))))))
+      (apply dom/div #js {:class "placed-boxes"}
+        (map render-solid-box (:placed-boxes state)))
+      (apply dom/div #js {:class "moving-boxes"}
+        (map render-ghost-box moving-boxes))
+      (render-ghost-box resizing-box)
+      (dom/div #js {:style #js {:position "relative"}}
+        (dom/h1 nil "Drag and drop")
+        (dom/p nil
+               (dom/a #js {:href "https://github.com/jamesmacaulay/zelkova/blob/gh-pages/examples/drag-and-drop/src/drag_and_drop/core.cljs"}
+                      "View source")
+               ".")
+        (dom/p nil
+               "Drag to create boxes, drag to move them around, and click to remove them.")
+        (dom/pre nil (.stringify js/JSON (clj->js state) nil 2))))))
 
 (om/root
   (fn [app owner]
