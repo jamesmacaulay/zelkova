@@ -231,6 +231,10 @@
   [switch-sig base value-sig]
   (keep-when (lift not switch-sig) base value-sig))
 
+(defn log
+  [sig]
+  (lift (fn [x] (pr x) x) sig))
+
 ; helpers:
 
 (def fresh-values (comp (filter fresh?)
