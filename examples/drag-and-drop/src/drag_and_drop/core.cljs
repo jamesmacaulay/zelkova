@@ -29,28 +29,33 @@
      :height (- bottom top)
      :hue (pos->hue centre)}))
 
-(defn centred-box
-  [centre-pos]
-  (let [scale [20 20]]
-    (build-box (map - centre-pos scale)
-               (map + centre-pos scale))))
-
 (defn in-box?
   [[x y]
    {:keys [top left width height]}]
   (and (< left x (+ left width))
        (< top y (+ top height))))
 
-(defn add-box
-  [pos state]
-  (update-in state
-             [:placed-boxes]
-             (fn [boxes]
-               (if (some (partial in-box? pos)
-                         (concat boxes (-> state :drag :moving-boxes)))
-                 boxes
-                 (conj boxes (centred-box pos))))))
+(defn all-boxes
+  [state]
+  (-> (:placed-boxes state)
+      (concat (-> state :drag :moving-boxes))
+      (conj (-> state :drag :resizing-box))))
 
+(defn clicked-boxes
+  [pos state]
+  (->> (all-boxes state)
+       (into #{} (filter (partial in-box? pos)))))
+
+(defn remove-boxes
+  [clicked-boxes state]
+  (-> state
+      (update-in [:placed-boxes] (partial remove clicked-boxes))
+      (update-in [:drag :moving-boxes] (partial remove clicked-boxes))
+      (update-in [:drag :resizing-box] (fn [box] (if (clicked-boxes box) nil box)))))
+
+(defn click
+  [pos state]
+  (remove-boxes (clicked-boxes pos state) state))
 
 (defn topleft-pos
   [{:keys [left top]}]
@@ -112,7 +117,7 @@
       (assoc :drag nil)))
 
 (defrecord NoOp [] IFn (-invoke [_ state] state))
-(defrecord Click [pos] IFn (-invoke [_ state] (add-box pos state)))
+(defrecord Click [pos] IFn (-invoke [_ state] (click pos state)))
 (defrecord StartDrag [pos] IFn (-invoke [_ state] (start-drag pos state)))
 (defrecord Drag [pos] IFn (-invoke [_ state] (drag pos state)))
 (defrecord StopDrag [] IFn (-invoke [_ state] (stop-drag state)))
@@ -176,7 +181,12 @@
         (map render-ghost-box moving-boxes))
       (render-ghost-box resizing-box)
       (dom/div #js {:style #js {:position "relative"}}
-        (dom/h1 nil "drag and drop")
+        (dom/h1 nil "Drag and drop")
+        (dom/p nil
+               "Drag to create boxes, drag to move them around, and click to remove them. "
+               (dom/a #js {:href "https://github.com/jamesmacaulay/zelkova/blob/gh-pages/examples/drag-and-drop/src/drag_and_drop/core.cljs"}
+                      "View source")
+               ".")
         (dom/pre nil (.stringify js/JSON (clj->js state) nil 2))))))
 
 (om/root
