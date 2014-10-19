@@ -4,7 +4,10 @@
 
 Elm-style FRP for Clojure and ClojureScript.
 
-[Here's a drag-and-drop example](http://jamesmacaulay.github.io/zelkova/examples/drag-and-drop/) which uses [Om](https://github.com/swannodette/om) for rendering.
+## Examples
+
+* [Drag and Drop](http://jamesmacaulay.github.io/zelkova/examples/drag-and-drop/) ([source](https://github.com/jamesmacaulay/zelkova/blob/gh-pages/examples/drag-and-drop/src/drag_and_drop/core.cljs))
+* [Mario](http://jamesmacaulay.github.io/zelkova/examples/mario/) ([source](https://github.com/jamesmacaulay/zelkova/blob/gh-pages/examples/drag-and-drop/src/mario/core.cljs))
 
 ## License
 
