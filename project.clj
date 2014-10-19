@@ -1,4 +1,4 @@
-(defproject jamesmacaulay/zelkova "0.1.0-SNAPSHOT"
+(defproject jamesmacaulay/zelkova "0.2.0"
   :description "Elm-style FRP for Clojure and ClojureScript"
   :url "http://github.com/jamesmacaulay/zelkova"
   :license {:name "MIT License"

@@ -5,7 +5,7 @@
   :dependencies [[org.clojure/clojure "1.7.0-alpha2"]
                  [org.clojure/clojurescript "0.0-2356"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-                 [jamesmacaulay/zelkova "0.1.0-SNAPSHOT"]
+                 [jamesmacaulay/zelkova "0.2.0"]
                  [om "0.7.3"]]
 
   :plugins [[lein-cljsbuild "1.0.4-SNAPSHOT"]]
