@@ -112,7 +112,7 @@
       (assoc :drag nil)))
 
 (defrecord NoOp [] IFn (-invoke [_ state] state))
-(defrecord AddBox [pos] IFn (-invoke [_ state] (add-box pos state)))
+(defrecord Click [pos] IFn (-invoke [_ state] (add-box pos state)))
 (defrecord StartDrag [pos] IFn (-invoke [_ state] (start-drag pos state)))
 (defrecord Drag [pos] IFn (-invoke [_ state] (drag pos state)))
 (defrecord StopDrag [] IFn (-invoke [_ state] (stop-drag state)))
@@ -126,14 +126,15 @@
                                                    dragging-positions)))
         dragstarts (z/keep-if identity true dragging?)
         dragstops (z/keep-if not false dragging?)
-        new-box-positions (->> mouse/position (z/sample-on mouse/clicks) (z/drop-when dragging? [0 0]))
+        click-positions (->> mouse/position (z/sample-on mouse/clicks) (z/drop-when dragging? [0 0]))
         actions (z/log (z/merge (z/constant (->NoOp))
-                                (z/sample-on dragstarts (z/lift ->StartDrag mouse/position))
+                                (z/lift ->StartDrag (z/sample-on dragstarts mouse/position))
                                 (z/lift (constantly (->StopDrag)) dragstops)
                                 (z/lift ->Drag dragging-positions)
-                                (z/lift ->AddBox new-box-positions)))]
+                                (z/lift ->Click click-positions)))]
     (z/foldp (fn [action state]
-               (action state))
+               (assoc (action state)
+                 :action (pr-str action)))
              init-state
              actions)))
 
@@ -163,12 +164,20 @@
   (let [placed-boxes (:placed-boxes state)
         moving-boxes (-> state :drag :moving-boxes)
         resizing-box (-> state :drag :resizing-box)]
-    (apply dom/div
-           nil
-           (concat (map render-solid-box (:placed-boxes state))
-                   (map render-ghost-box (if resizing-box
-                                           (conj moving-boxes resizing-box)
-                                           moving-boxes))))))
+    (dom/div #js {:style #js {:-webkit-touch-callout "none"
+                              :-webkit-user-select "none"
+                              :-khtml-user-select "none"
+                              :-moz-user-select "none"
+                              :-ms-user-select "none"
+                              :user-select "none"}}
+      (apply dom/div #js {:class "placed-boxes"}
+        (map render-solid-box (:placed-boxes state)))
+      (apply dom/div #js {:class "moving-boxes"}
+        (map render-ghost-box moving-boxes))
+      (render-ghost-box resizing-box)
+      (dom/div #js {:style #js {:position "relative"}}
+        (dom/h1 nil "drag and drop")
+        (dom/pre nil (.stringify js/JSON (clj->js state) nil 2))))))
 
 (om/root
   (fn [app owner]
