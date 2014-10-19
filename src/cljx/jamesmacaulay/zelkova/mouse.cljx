@@ -20,12 +20,10 @@
   [graph opts]
   (listen js/document
           "mousemove"
-          (comp (map (fn [e] [(.-offsetX e) (.-offsetY e)]))
-                (map (partial z/->Event ::position)))))
+          (map (fn [e] [(.-pageX (.-event_ e)) (.-pageY (.-event_ e))]))))
 
 #+cljs
-(def position (assoc (z/input [0 0] ::position)
-                :event-sources {::position position-channel}))
+(def position (z/input [0 0] ::position position-channel))
 
 #+cljs
 (def x (z/lift first position))
@@ -38,20 +36,17 @@
   [graph opts]
   (listen js/document
           "click"
-          (comp (map (constantly :click))
-                (map (partial z/->Event ::clicks)))))
+          (map (constantly :click))))
 
 #+cljs
-(def clicks (assoc (z/input :click ::clicks)
-              :event-sources {::clicks clicks-channel}))
+(def clicks (z/input :click ::clicks clicks-channel))
 
 #+cljs
 (defn down?-channel
   [graph opts]
-  (let [down-events (listen js/document "mousedown" (map (constantly (z/->Event ::down? true))))
-        up-events (listen js/document "mouseup" (map (constantly (z/->Event ::down? false))))]
+  (let [down-events (listen js/document "mousedown" (map (constantly true)))
+        up-events (listen js/document "mouseup" (map (constantly false)))]
     (async/merge [down-events up-events])))
 
 #+cljs
-(def down? (assoc (z/input false ::down?)
-             :event-sources {::down? down?-channel}))
+(def down? (z/input false ::down? down?-channel))

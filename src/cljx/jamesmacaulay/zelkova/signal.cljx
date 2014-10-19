@@ -77,11 +77,23 @@
       (->Fresh (:value event))
       (->Cached (:value prev)))))
 
+(defn values-fn->events-fn
+  [value-channel-fn topic]
+  (fn [graph opts]
+    (let [ch (value-channel-fn graph opts)]
+      (async/pipe ch (chan 1 (map (partial ->Event topic)))))))
+
 (defn input
   ([init] (input init (gen-topic)))
   ([init topic]
    (map->Signal {:init init
-                 :relayed-events #{topic}})))
+                 :relayed-events #{topic}}))
+  ([init topic value-channel-fn]
+   (let [event-channel-fn (values-fn->events-fn value-channel-fn
+                                                topic)]
+     (map->Signal {:init init
+                   :relayed-events #{topic}
+                   :event-sources {topic event-channel-fn}}))))
 
 (defn constant
   [x]

@@ -30,7 +30,7 @@
   [n]
   (fn [graph opts]
     (let [ms-per-frame (/ 1000 n)
-          out (async/chan 1 (map (partial z/->Event [::fps n])))]
+          out (async/chan)]
       (go-loop [t (now)
                 error 0]
         (<! (async/timeout (- ms-per-frame error)))
@@ -42,13 +42,12 @@
 
 (defn fps
   [n]
-  (assoc (z/input 0 [::fps n])
-    :event-sources {[::fps n] (fps-channel-fn n)}))
+  (z/input 0 [::fps n] (fps-channel-fn n)))
 
 (defn every-channel-fn
   [ms]
   (fn [graph opts]
-    (let [out (async/chan 1 (map (partial z/->Event [::every ms])))]
+    (let [out (async/chan)]
       (go-loop [t (now)
                 error 0]
         (<! (async/timeout (- ms error)))
@@ -59,5 +58,4 @@
 
 (defn every
   [ms]
-  (assoc (z/input (now) [::every ms])
-    :event-sources {[::every ms] (every-channel-fn ms)}))
+  (z/input (now) [::every ms] (every-channel-fn ms)))
