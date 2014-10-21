@@ -10,7 +10,7 @@
 
 (enable-console-print!)
 
-(def init-state {:placed-boxes []
+(def init-state {:boxes []
                  :drag nil})
 
 (defn pos->hue
@@ -27,7 +27,8 @@
      :left left
      :width (- right left)
      :height (- bottom top)
-     :hue (pos->hue centre)}))
+     :hue (pos->hue centre)
+     :resizing? true}))
 
 (defn in-box?
   [[x y]
@@ -35,86 +36,62 @@
   (and (< left x (+ left width))
        (< top y (+ top height))))
 
-(defn all-boxes
-  [state]
-  (-> (:placed-boxes state)
-      (concat (-> state :drag :moving-boxes))
-      (conj (-> state :drag :resizing-box))))
+(defn moving?
+  [box]
+  (contains? box :drag-offset))
 
-(defn clicked-boxes
-  [pos state]
-  (->> (all-boxes state)
-       (into #{} (filter (partial in-box? pos)))))
-
-(defn remove-boxes
-  [clicked-boxes state]
-  (-> state
-      (update-in [:placed-boxes] (partial remove clicked-boxes))
-      (update-in [:drag :moving-boxes] (partial remove clicked-boxes))
-      (update-in [:drag :resizing-box] (fn [box] (if (clicked-boxes box) nil box)))))
+(defn resizing?
+  [box]
+  (:resizing? box))
 
 (defn click
   [pos state]
-  (remove-boxes (clicked-boxes pos state) state))
+  (let [without-clicked (remove (partial in-box? pos))]
+    (update-in state [:boxes] (partial into [] without-clicked))))
 
 (defn topleft-pos
   [{:keys [left top]}]
   [left top])
 
+(defn start-dragging-box-from-pos
+  [pos box]
+  (let [offset (->> box (topleft-pos) (map - pos))]
+    (assoc box :drag-offset offset)))
+
 (defn start-drag
   [pos state]
   (let [drag-target? (partial in-box? pos)
-        drag-offset (comp (partial map - pos) topleft-pos)
-        state-with-drag (reduce (fn [state box]
-                                  (if (drag-target? box)
-                                    (update-in state [:drag :moving-boxes] conj (assoc box :drag-offset (drag-offset box)))
-                                    (update-in state [:placed-boxes] conj box)))
-                                (assoc state
-                                  :placed-boxes []
-                                  :drag {:moving-boxes []
-                                         :resizing-box nil
-                                         :start-pos pos})
-                                (:placed-boxes state))]
-    (if (-> state-with-drag :drag :moving-boxes seq)
-      state-with-drag
-      (assoc-in state-with-drag
-                [:drag :resizing-box]
-                (build-box pos pos)))))
+        {targets true non-targets false} (->> state :boxes (group-by drag-target?))
+        boxes' (into [] (concat non-targets
+                                (map (partial start-dragging-box-from-pos pos) targets)
+                                (when (empty? targets) [(build-box pos pos)])))]
+    (assoc state
+      :boxes boxes'
+      :drag {:start-pos pos})))
 
 (defn drag
   [pos state]
-  (let [drag-to-pos (fn [box]
+  (let [box-category #(cond (moving? %) :moving
+                            (resizing? %) :resizing
+                            :else :placed)
+        {:keys [placed moving resizing]} (group-by box-category (:boxes state))
+        drag-to-pos (fn [box]
                       (let [[left top] (map - pos (:drag-offset box))]
-                        (assoc box :left left :top top)))]
-    (-> state
-        (update-in [:drag :moving-boxes] (partial mapv drag-to-pos))
-        (update-in [:drag :resizing-box] (fn [box]
-                                           (when box
-                                             (build-box pos (-> state :drag :start-pos))))))))
-(defn drop-moving-boxes
-  [state]
-  (-> state
-      (update-in [:placed-boxes]
-                 (fn [boxes]
-                   (let [moved-boxes (map #(dissoc % :drag-offset)
-                                          (-> state :drag :moving-boxes))]
-                     (into [] (concat boxes moved-boxes)))))))
+                        (assoc box :left left :top top)))
+        boxes' (into [] (concat placed
+                                (map drag-to-pos moving)
+                                (map (fn [_] (build-box pos (-> state :drag :start-pos)))
+                                     resizing)))]
+    (assoc state :boxes boxes')))
 
-(defn drop-resizing-box
+(defn drop-boxes
   [state]
-  (-> state
-      (update-in [:placed-boxes]
-                 (fn [boxes]
-                   (if-let [resizing-box (-> state :drag :resizing-box)]
-                     (conj boxes resizing-box)
-                     boxes)))))
+  (let [drop-box (fn [box] (dissoc box :drag-offset :resizing?))]
+    (update-in state [:boxes] (partial into [] (map drop-box)))))
 
 (defn stop-drag
   [state]
-  (-> state
-      drop-moving-boxes
-      drop-resizing-box
-      (assoc :drag nil)))
+  (-> state (drop-boxes) (assoc :drag nil)))
 
 (defrecord NoOp [] IFn (-invoke [_ state] state))
 (defrecord Click [pos] IFn (-invoke [_ state] (click pos state)))
@@ -126,9 +103,10 @@
   (let [dragging-positions (z/keep-when mouse/down?
                                         [0 0]
                                         mouse/position)
-        dragging? (z/drop-repeats (z/merge (z/keep-if not false mouse/down?)
-                                           (z/lift (constantly true)
-                                                   dragging-positions)))
+        dragging? (->> (z/constant true)
+                       (z/sample-on dragging-positions)
+                       (z/merge (z/keep-if not false mouse/down?))
+                       (z/drop-repeats))
         dragstarts (z/keep-if identity true dragging?)
         dragstops (z/keep-if not false dragging?)
         click-positions (->> mouse/position (z/sample-on mouse/clicks) (z/drop-when dragging? [0 0]))
@@ -139,20 +117,21 @@
                                 (z/lift ->Click click-positions)))]
     (z/foldp (fn [action state]
                (assoc (action state)
-                 :action (pr-str action)))
+                 :last-action (pr-str action)))
              init-state
              actions)))
 
 (def app-state (z/pipe-to-atom state-signal))
 
 (defn box-color
-  [opacity box]
-  (str "hsla(" (:hue box) ",50%,50%," opacity ")"))
+  [box]
+  (let [opacity (if (or (moving? box) (resizing? box)) 0.5 1)]
+    (str "hsla(" (:hue box) ",50%,50%," opacity ")")))
 
 (defn render-box
-  [opacity box]
+  [box]
   (when box
-    (dom/div #js {:style #js {:backgroundColor (box-color opacity box)
+    (dom/div #js {:style #js {:backgroundColor (box-color box)
                               :position "absolute"
                               :top (:top box)
                               :left (:left box)
@@ -160,35 +139,25 @@
                               :height (:height box)}}
              nil)))
 
-(def render-solid-box (partial render-box 1))
-
-(def render-ghost-box (partial render-box 0.5))
-
 (defn render-state
   [state]
-  (let [placed-boxes (:placed-boxes state)
-        moving-boxes (-> state :drag :moving-boxes)
-        resizing-box (-> state :drag :resizing-box)]
-    (dom/div #js {:style #js {:-webkit-touch-callout "none"
-                              :-webkit-user-select "none"
-                              :-khtml-user-select "none"
-                              :-moz-user-select "none"
-                              :-ms-user-select "none"
-                              :user-select "none"}}
-      (apply dom/div #js {:class "placed-boxes"}
-        (map render-solid-box (:placed-boxes state)))
-      (apply dom/div #js {:class "moving-boxes"}
-        (map render-ghost-box moving-boxes))
-      (render-ghost-box resizing-box)
-      (dom/div #js {:style #js {:position "relative"}}
-        (dom/h1 nil "Drag and drop")
-        (dom/p nil
-               (dom/a #js {:href "https://github.com/jamesmacaulay/zelkova/blob/gh-pages/examples/drag-and-drop/src/drag_and_drop/core.cljs"}
-                      "View source")
-               ".")
-        (dom/p nil
-               "Drag to create boxes, drag to move them around, and click to remove them.")
-        (dom/pre nil (.stringify js/JSON (clj->js state) nil 2))))))
+  (dom/div #js {:style #js {:-webkit-touch-callout "none"
+                            :-webkit-user-select "none"
+                            :-khtml-user-select "none"
+                            :-moz-user-select "none"
+                            :-ms-user-select "none"
+                            :user-select "none"}}
+           (apply dom/div nil
+                  (map render-box (:boxes state)))
+           (dom/div #js {:style #js {:position "relative"}}
+                    (dom/h1 nil "Drag and drop")
+                    (dom/p nil
+                           (dom/a #js {:href "https://github.com/jamesmacaulay/zelkova/blob/gh-pages/examples/drag-and-drop/src/drag_and_drop/core.cljs"}
+                                  "View source")
+                           ".")
+                    (dom/p nil
+                           "Drag to create boxes, drag to move them around, and click to remove them.")
+                    (dom/pre nil (.stringify js/JSON (clj->js state) nil 2)))))
 
 (om/root
   (fn [app owner]
@@ -197,3 +166,4 @@
         (render-state app))))
   app-state
   {:target (. js/document (getElementById "app"))})
+
