@@ -77,7 +77,7 @@
 
 (defn- key-signal
   [f]
-  (z/drop-repeats (z/lift f key-merge)))
+  (z/drop-repeats (z/map f key-merge)))
 
 (def keys-down (key-signal :key-codes))
 
@@ -111,4 +111,4 @@
 (def enter (down? 13))
 
 (def last-pressed
-  (z/lift #(.-keyCode %) down-events))
+  (z/map #(.-keyCode %) down-events))

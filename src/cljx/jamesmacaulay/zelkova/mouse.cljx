@@ -26,10 +26,10 @@
 (def position (z/input [0 0] ::position position-channel))
 
 #+cljs
-(def x (z/lift first position))
+(def x (z/map first position))
 
 #+cljs
-(def y (z/lift second position))
+(def y (z/map second position))
 
 #+cljs
 (defn clicks-channel

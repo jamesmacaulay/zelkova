@@ -25,7 +25,7 @@
 (deftest test-signal-sources
   (let [input (z/input 0)
         foldp (z/foldp + 0 input)
-        lift (z/lift vector input foldp)
+        lift (z/map vector input foldp)
         async (z/async lift)]
     (are [sig sources] (= (z/sources sig) sources)
          input #{}
@@ -36,7 +36,7 @@
 (deftest test-output-node->dependency-map
   (let [input (z/input 0)
         foldp (z/foldp + 0 input)
-        lift (z/lift vector input foldp)
+        lift (z/map vector input foldp)
         async (z/async lift)]
     (are [out deps] (= (z/output-node->dependency-map out) deps)
          input {input #{}}
@@ -53,7 +53,7 @@
 (deftest test-topsort
   (let [input (z/input 0)
         foldp (z/foldp + 0 input)
-        lift (z/lift vector input foldp)
+        lift (z/map vector input foldp)
         async (z/async lift)]
     (are [out sorted-sigs] (= (z/topsort out) sorted-sigs)
          input [input]
@@ -67,7 +67,7 @@
           letter (event-constructor :letters)
           numbers-input (z/input 0 :numbers)
           letters-input (z/input :a :letters)
-          pairs (z/lift vector numbers-input letters-input)
+          pairs (z/map vector numbers-input letters-input)
           live-graph (z/spawn pairs)
           output (async/tap live-graph
                             (chan 1 (comp (filter z/fresh?)
@@ -95,7 +95,7 @@
   (go
     (let [number (event-constructor :numbers)
           in (z/input 0 :numbers)
-          incremented (z/lift inc in)
+          incremented (z/map inc in)
           graph (z/spawn incremented)
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= 1 (:init incremented)))
@@ -104,15 +104,15 @@
              (<! (async/into [] out)))))
     (let [[a b c] (map event-constructor [:a :b :c])
           ins (map (partial z/input 0) [:a :b :c])
-          summed (apply z/lift + ins)
+          summed (apply z/map + ins)
           graph (z/spawn summed)
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= 0 (:init summed)))
       (async/onto-chan graph [(a 1) (b 2) (c 3) (a 10)])
       (is (= [1 3 6 15]
              (<! (async/into [] out)))))
-    (let [zero-arity-+-lift (z/lift +)
-          zero-arity-vector-lift (z/lift vector)]
+    (let [zero-arity-+-lift (z/map +)
+          zero-arity-vector-lift (z/map vector)]
       (is (= 0 (:init zero-arity-+-lift)))
       (is (= [] (:init zero-arity-vector-lift))))))
 
@@ -132,9 +132,9 @@
   (go
     (let [number (event-constructor :numbers)
           in (z/input 0 :numbers)
-          decremented (z/lift dec in)
-          incremented (z/lift inc in)
-          combined (z/lift (fn [a b] {:decremented a
+          decremented (z/map dec in)
+          incremented (z/map inc in)
+          combined (z/map (fn [a b] {:decremented a
                                             :incremented b})
                                  decremented
                                  incremented)
@@ -152,7 +152,7 @@
     (let [number (event-constructor :numbers)
           in (z/input 0 :numbers)
           foo (z/constant :foo)
-          combined (z/lift vector in foo)
+          combined (z/map vector in foo)
           graph (z/spawn combined)
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= [0 :foo] (:init combined)))
@@ -166,8 +166,8 @@
           b (event-constructor :b)
           a-in (z/input 10 :a)
           b-in (z/input 20 :b)
-          b-dec (z/lift dec b-in)
-          b-inc (z/lift inc b-in)
+          b-dec (z/map dec b-in)
+          b-inc (z/map inc b-in)
           merged (z/merge a-in b-dec b-in b-inc)
           graph (z/spawn merged)
           out (async/tap graph (chan 1 z/fresh-values))]
@@ -180,7 +180,7 @@
   (go
     (let [number (event-constructor :numbers)
           in (z/input 0 :numbers)
-          inc'd (z/lift inc in)
+          inc'd (z/map inc in)
           combined (z/combine [in inc'd])
           graph (z/spawn combined)
           out (async/tap graph (chan 1 z/fresh-values))]
@@ -237,7 +237,7 @@
           in1 (z/input 1 :in1)
           in2 (z/input 1 :in2)
           count1 (z/count in1)
-          combined (z/lift vector count1 in1 in2)
+          combined (z/map vector count1 in1 in2)
           graph (z/spawn combined)
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= 0 (:init count1)))
@@ -259,7 +259,7 @@
           in1 (z/input 1 :in1)
           in2 (z/input 1 :in2)
           count1-odd (z/count-if odd? in1)
-          combined (z/lift vector count1-odd in1 in2)
+          combined (z/map vector count1-odd in1 in2)
           graph (z/spawn combined)
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= 0 (:init count1-odd)))
@@ -283,7 +283,7 @@
           count-odd (z/count oddnums)
           evennums (z/keep-if even? -2 in)
           count-even (z/count evennums)
-          combined (z/lift vector oddnums count-odd evennums count-even)
+          combined (z/map vector oddnums count-odd evennums count-even)
           graph (z/spawn combined)
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= [-1 0 0 0] (:init combined)))
@@ -299,11 +299,11 @@
           letter (event-constructor :letters)
           numbers-in (z/input 0 :numbers)
           letters-in (z/input :a :letters)
-          odd-kept-letters (z/keep-when (z/lift odd? numbers-in) :false-init letters-in)
+          odd-kept-letters (z/keep-when (z/map odd? numbers-in) :false-init letters-in)
           graph (z/spawn odd-kept-letters)
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= :false-init (:init odd-kept-letters)))
-      (is (= :a (:init (z/keep-when (z/lift even? numbers-in) :z letters-in))))
+      (is (= :a (:init (z/keep-when (z/map even? numbers-in) :z letters-in))))
       (async/onto-chan graph [(letter :b)
                               (number 1)
                               (letter :c)
@@ -342,8 +342,8 @@
   (go
     (let [number (event-constructor :numbers)
           in (z/input 0 :numbers)
-          decremented (z/lift dec in)
-          incremented (z/lift inc in)
+          decremented (z/map dec in)
+          incremented (z/map inc in)
           async-incremented (z/async incremented)
           combined (z/combine [decremented async-incremented])
           graph (z/spawn combined)

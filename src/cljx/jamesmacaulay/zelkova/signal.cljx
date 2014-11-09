@@ -1,6 +1,6 @@
 #+clj
 (ns jamesmacaulay.zelkova.signal
-  (:refer-clojure :exclude [merge count])
+  (:refer-clojure :exclude [map merge count])
   (:require [clojure.core :as core]
             [clojure.zip :as zip]
             [clojure.core.async :as async :refer [go go-loop chan <! >!]]
@@ -11,7 +11,7 @@
 
 #+cljs
 (ns jamesmacaulay.zelkova.signal
-  (:refer-clojure :exclude [merge count])
+  (:refer-clojure :exclude [map merge count])
   (:require [cljs.core :as core]
             [clojure.zip :as zip]
             [cljs.core.async :as async :refer [chan <! >!]]
@@ -81,7 +81,7 @@
   [value-channel-fn topic]
   (fn [graph opts]
     (let [ch (value-channel-fn graph opts)]
-      (async/pipe ch (chan 1 (map (partial ->Event topic)))))))
+      (async/pipe ch (chan 1 (core/map (partial ->Event topic)))))))
 
 (defn input
   ([init] (input init (gen-topic)))
@@ -101,7 +101,7 @@
     (map->Signal {:init x
                   :message-emitter [:events (constantly cached)]})))
 
-(defn liftseq
+(defn mapseq
   [f sources]
   (if (empty? sources)
     (constant (f))
@@ -115,14 +115,14 @@
                                :value)
                     :message-emitter [sources emit-message]}))))
 
-(defn lift
+(defn map
   [f & sources]
-  (liftseq f sources))
+  (mapseq f sources))
 
 (defn template
   [signal-map]
   (let [ks (keys signal-map)]
-    (liftseq (fn [& values]
+    (mapseq (fn [& values]
                (zipmap ks values))
              (vals signal-map))))
 
@@ -160,7 +160,7 @@
   [source]
   (let [topic source
         msgs->events (comp (filter fresh?)
-                           (map (fn [msg]
+                           (core/map (fn [msg]
                                   (->Event topic (:value msg)))))
         events-channel-fn (fn [live-graph _]
                             (async/tap (get (:mult-map live-graph) source)
@@ -183,7 +183,7 @@
 
 (defn combine
   [sigs]
-  (liftseq vector sigs))
+  (mapseq vector sigs))
 
 (defn sample-on
   [sampler-sig value-sig]
@@ -223,22 +223,22 @@
 (defn keep-when
   [switch-sig base value-sig]
   (->> value-sig
-       (lift vector (sample-on value-sig switch-sig))
+       (map vector (sample-on value-sig switch-sig))
        (keep-if first [false base])
-       (lift second)))
+       (map second)))
 
 (defn drop-when
   [switch-sig base value-sig]
-  (keep-when (lift not switch-sig) base value-sig))
+  (keep-when (map not switch-sig) base value-sig))
 
 (defn log
   [sig]
-  (lift (fn [x] (pr x) x) sig))
+  (map (fn [x] (pr x) x) sig))
 
 ; helpers:
 
 (def fresh-values (comp (filter fresh?)
-                        (map :value)))
+                        (core/map :value)))
 
 ; compiling graphs:
 
@@ -329,7 +329,7 @@
 
 (defn gather-event-sources
   [sorted-signals]
-  (into {} (map :event-sources) sorted-signals))
+  (into {} (core/map :event-sources) sorted-signals))
 
 (defprotocol LiveChannelGraphProtocol
   (output-mult [g])

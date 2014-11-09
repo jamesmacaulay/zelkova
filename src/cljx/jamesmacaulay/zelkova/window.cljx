@@ -41,6 +41,6 @@
 (def dimensions
   (z/input [0 0] ::dimensions dimensions-channel))
 
-(def width (z/lift first dimensions))
+(def width (z/map first dimensions))
 
-(def height (z/lift second dimensions))
+(def height (z/map second dimensions))

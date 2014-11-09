@@ -2,7 +2,7 @@
   (:require [om.core :as om :include-macros true]
             [om.dom :as dom :include-macros true]
             [cljs.core.async :as async :refer [>! <!]]
-            [jamesmacaulay.zelkova.signal :as z :refer [lift sample-on foldp reducep]]
+            [jamesmacaulay.zelkova.signal :as z :refer [map sample-on foldp reducep]]
             [jamesmacaulay.zelkova.mouse :as mouse]
             [jamesmacaulay.zelkova.time :as time]
             [jamesmacaulay.async-tools.core :as tools])
@@ -111,10 +111,10 @@
         dragstops (z/keep-if not false dragging?)
         click-positions (->> mouse/position (z/sample-on mouse/clicks) (z/drop-when dragging? [0 0]))
         actions (z/log (z/merge (z/constant (->NoOp))
-                                (z/lift ->StartDrag (z/sample-on dragstarts mouse/position))
-                                (z/lift (constantly (->StopDrag)) dragstops)
-                                (z/lift ->Drag dragging-positions)
-                                (z/lift ->Click click-positions)))]
+                                (z/map ->StartDrag (z/sample-on dragstarts mouse/position))
+                                (z/map (constantly (->StopDrag)) dragstops)
+                                (z/map ->Drag dragging-positions)
+                                (z/map ->Click click-positions)))]
     (z/foldp (fn [action state]
                (assoc (action state)
                  :last-action (pr-str action)))
