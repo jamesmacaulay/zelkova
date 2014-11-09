@@ -8,7 +8,7 @@
 
 ## What does it look like?
 
-```clojurescript
+```clojure
 (ns my-app.ui
   (:require [jamesmacaulay.zelkova.signal :as z]
             [jamesmacaulay.zelkova.keyboard :as keyboard]
