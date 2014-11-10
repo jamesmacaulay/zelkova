@@ -42,7 +42,7 @@
   (fresh? [_] false))
 
 (defprotocol SignalProtocol
-  (sources [s])
+  (signal-deps [s])
   (message-emitter [s]))
 
 (defn signal?
@@ -60,9 +60,10 @@
 (defrecord Signal
   [init message-emitter relayed-events deps event-sources]
   SignalProtocol
-  (sources [_]
-    (or deps
-        (into #{} (filter signal?) (:sources message-emitter))))
+  (signal-deps [_]
+    (into #{}
+          (filter signal?)
+          (or deps (:sources message-emitter))))
   (message-emitter [_]
     (cond
       message-emitter message-emitter
@@ -163,7 +164,7 @@
                             (async/tap (get (:mult-map live-graph) source)
                                        (chan 1 msgs->events)))]
     (map->Signal {:init (:init source)
-                  :deps #{source}
+                  :deps [source]
                   :event-sources {topic events-channel-fn}
                   :relayed-events #{topic}})))
 
@@ -244,7 +245,7 @@
 (defn node-graph-zipper
   [output-node]
   (zip/zipper (constantly true)
-              (comp seq sources)
+              (comp seq signal-deps)
               nil
               output-node))
 
@@ -271,7 +272,7 @@
       (let [n (zip/node loc)]
         (recur (if (sequential? n)
                  deps
-                 (assoc deps n (sources n)))
+                 (assoc deps n (signal-deps n)))
                (zip/next loc))))))
 
 (defn topsort

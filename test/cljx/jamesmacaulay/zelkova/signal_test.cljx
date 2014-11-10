@@ -27,7 +27,7 @@
         foldp (z/foldp + 0 input)
         lift (z/map vector input foldp)
         async (z/async lift)]
-    (are [sig sources] (= (z/sources sig) sources)
+    (are [sig sources] (= (z/signal-deps sig) sources)
          input #{}
          foldp #{input}
          lift #{input foldp}
