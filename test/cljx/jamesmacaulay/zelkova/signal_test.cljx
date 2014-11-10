@@ -327,12 +327,10 @@
 
 (deftest-async test-world-building
   (go
-    (let [pos (event-constructor :mouse-position)
-          event-source (async/to-chan (map pos [[10 10]
-                                                [20 20]
-                                                [30 30]]))
-          mouse-position (assoc (z/input [0 0] :mouse-position)
-                           :event-sources {:mouse-position (constantly event-source)})
+    (let [event-source (async/to-chan [[10 10]
+                                       [20 20]
+                                       [30 30]])
+          mouse-position (z/input [0 0] :mouse-position (constantly event-source))
           graph (z/spawn mouse-position)
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= [[10 10] [20 20] [30 30]]
