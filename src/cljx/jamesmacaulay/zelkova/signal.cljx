@@ -52,7 +52,7 @@
 (defn- relayed-events-message-emitter
   [topics]
   (let [topics (if (set? topics) topics (set topics))]
-    (fn [prev event]
+    (fn [prev [event]]
       (if (contains? topics (:topic event))
         (->Fresh (:value event))
         (->Cached (:value prev))))))
@@ -62,20 +62,12 @@
   SignalProtocol
   (sources [_]
     (or deps
-        (let [tmpl (first message-emitter)
-              tmpl-seq (if (sequential? tmpl) tmpl (vector tmpl))]
-          (into #{} (filter signal?) tmpl-seq))))
+        (into #{} (filter signal?) (:sources message-emitter))))
   (message-emitter [_]
     (cond
       message-emitter message-emitter
-      relayed-events [:events (relayed-events-message-emitter relayed-events)])))
-
-(defn- messages-from-events
-  [topic]
-  (fn [prev event]
-    (if (= topic (:topic event))
-      (->Fresh (:value event))
-      (->Cached (:value prev)))))
+      relayed-events {:sources [:events]
+                      :msg-fn (relayed-events-message-emitter relayed-events)})))
 
 (defn values-fn->events-fn
   [value-channel-fn topic]
@@ -99,13 +91,15 @@
   [x]
   (let [cached (->Cached x)]
     (map->Signal {:init x
-                  :message-emitter [:events (constantly cached)]})))
+                  :message-emitter {:sources [:events]
+                                    :msg-fn (constantly cached)}})))
 
 (defn mapseq
   [f sources]
   (if (empty? sources)
     (constant (f))
-    (let [emit-message (fn [prev messages]
+    (let [sources (vec sources)
+          emit-message (fn [prev messages]
                          (if (some fresh? messages)
                            (->Fresh (apply f (mapv :value messages)))
                            (->Cached (:value prev))))]
@@ -113,7 +107,8 @@
                                (mapv (comp ->Fresh :init))
                                (emit-message nil)
                                :value)
-                    :message-emitter [sources emit-message]}))))
+                    :message-emitter {:sources sources
+                                      :msg-fn emit-message}}))))
 
 (defn map
   [f & sources]
@@ -129,19 +124,21 @@
 (defn foldp
   [f init source]
   (map->Signal {:init init
-                :message-emitter [source (fn [acc message]
-                                           (if (fresh? message)
-                                             (->Fresh (f (:value message) (:value acc)))
-                                             (->Cached (:value acc))))]}))
+                :message-emitter {:sources [source]
+                                  :msg-fn (fn [acc [message]]
+                                        (if (fresh? message)
+                                          (->Fresh (f (:value message) (:value acc)))
+                                          (->Cached (:value acc))))}}))
 
 (defn drop-repeats
   [sig]
   (map->Signal {:init (:init sig)
-                :message-emitter [sig (fn [prev msg]
+                :message-emitter {:sources [sig]
+                                  :msg-fn (fn [prev [msg]]
                                         (if (and (fresh? msg)
                                                  (not= (:value msg) (:value prev)))
                                           msg
-                                          (->Cached (:value prev))))]}))
+                                          (->Cached (:value prev))))}}))
 
 
 (defn reducep
@@ -173,9 +170,10 @@
 (defn mergeseq
   [sigs]
   (map->Signal {:init (:init (first sigs))
-                :message-emitter [sigs (fn [prev messages]
-                                         (or (first (filter fresh? messages))
-                                             (->Cached (:value prev))))]}))
+                :message-emitter {:sources sigs
+                                  :msg-fn (fn [prev messages]
+                                        (or (first (filter fresh? messages))
+                                            (->Cached (:value prev))))}}))
 
 (defn merge
   [& sigs]
@@ -188,11 +186,11 @@
 (defn sample-on
   [sampler-sig value-sig]
   (map->Signal {:init (:init value-sig)
-                :message-emitter [[sampler-sig value-sig]
-                                  (fn [prev [sampler-msg value-msg]]
-                                    (if (fresh? sampler-msg)
-                                      (->Fresh (:value value-msg))
-                                      (->Cached (:value prev))))]}))
+                :message-emitter {:sources [sampler-sig value-sig]
+                                  :msg-fn (fn [prev [sampler-msg value-msg]]
+                                        (if (fresh? sampler-msg)
+                                          (->Fresh (:value value-msg))
+                                          (->Cached (:value prev))))}}))
 
 (defn count
   [sig]
@@ -210,11 +208,12 @@
   (map->Signal {:init (if (pred (:init sig))
                         (:init sig)
                         base)
-                :message-emitter [sig (fn [prev msg]
+                :message-emitter {:sources [sig]
+                                  :msg-fn (fn [prev [msg]]
                                         (if (and (fresh? msg)
                                                  (pred (:value msg)))
                                           (->Fresh (:value msg))
-                                          (->Cached (:value prev))))]}))
+                                          (->Cached (:value prev))))}}))
 
 (defn drop-if
   [pred base sig]
@@ -293,13 +292,17 @@
 
 ; wiring up channels:
 
-(defn- tap-template
-  [tmpl mult-map]
-  (if (sequential? tmpl)
-    (->> tmpl
-         (mapv #(async/tap (get mult-map %) (chan)))
-         (async/map vector))
-    (async/tap (get mult-map tmpl) (chan))))
+
+(defn- tap-signal
+  [mult-map source]
+  (let [mult (get mult-map source)]
+    (async/tap mult (chan))))
+
+(defn- tap-signals
+  [mult-map sources]
+  (->> sources
+       (mapv (partial tap-signal mult-map))
+       (async/map vector)))
 
 (defn- spawn-message-loop!
   [init msg-fn c-in c-out]
@@ -312,9 +315,9 @@
           (recur out-val))))))
 
 (defn- build-message-mult
-  [signal mult-map]
-  (if-let [[tmpl msg-fn] (message-emitter signal)]
-    (let [c-in (tap-template tmpl mult-map)
+  [mult-map signal]
+  (if-let [{:keys [sources msg-fn]} (message-emitter signal)]
+    (let [c-in (tap-signals mult-map sources)
           c-out (chan)]
       (spawn-message-loop! (:init signal) msg-fn c-in c-out)
       (async/mult c-out))))
@@ -323,7 +326,7 @@
   [sorted-signals events-mult]
   (reduce (fn [mult-map signal]
             (assoc mult-map
-              signal (build-message-mult signal mult-map)))
+              signal (build-message-mult mult-map signal)))
           {:events events-mult}
           sorted-signals))
 

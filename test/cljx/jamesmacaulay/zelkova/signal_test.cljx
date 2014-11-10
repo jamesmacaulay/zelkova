@@ -363,4 +363,3 @@
                           :b (z/input 2 :b)})]
     (is (= {:a 1 :b 2}
            (:init tmpl)))))
-
