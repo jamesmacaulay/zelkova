@@ -49,26 +49,24 @@
   [x]
   (satisfies? SignalProtocol x))
 
-(defn- relayed-events-message-emitter
+(defn- event-relay
   [topics]
   (let [topics (if (set? topics) topics (set topics))]
-    (fn [prev [event]]
-      (if (contains? topics (:topic event))
-        (->Fresh (:value event))
-        (->Cached (:value prev))))))
+    {:sources [:events]
+     :relayed-event-topics topics
+     :msg-fn (fn [prev [event]]
+               (if (contains? topics (:topic event))
+                 (->Fresh (:value event))
+                 (->Cached (:value prev))))}))
 
 (defrecord Signal
-  [init message-emitter relayed-events deps event-sources]
+  [init message-emitter deps event-sources]
   SignalProtocol
   (signal-deps [_]
     (into #{}
           (filter signal?)
           (or deps (:sources message-emitter))))
-  (message-emitter [_]
-    (cond
-      message-emitter message-emitter
-      relayed-events {:sources [:events]
-                      :msg-fn (relayed-events-message-emitter relayed-events)})))
+  (message-emitter [_] message-emitter))
 
 (defn values-fn->events-fn
   [value-channel-fn topic]
@@ -80,12 +78,12 @@
   ([init] (input init (gen-topic)))
   ([init topic]
    (map->Signal {:init init
-                 :relayed-events #{topic}}))
+                 :message-emitter (event-relay #{topic})}))
   ([init topic value-channel-fn]
    (let [event-channel-fn (values-fn->events-fn value-channel-fn
                                                 topic)]
      (map->Signal {:init init
-                   :relayed-events #{topic}
+                   :message-emitter (event-relay #{topic})
                    :event-sources {topic event-channel-fn}}))))
 
 (defn constant
@@ -166,15 +164,15 @@
     (map->Signal {:init (:init source)
                   :deps [source]
                   :event-sources {topic events-channel-fn}
-                  :relayed-events #{topic}})))
+                  :message-emitter (event-relay #{topic})})))
 
 (defn mergeseq
   [sigs]
   (map->Signal {:init (:init (first sigs))
                 :message-emitter {:sources sigs
                                   :msg-fn (fn [prev messages]
-                                        (or (first (filter fresh? messages))
-                                            (->Cached (:value prev))))}}))
+                                            (or (first (filter fresh? messages))
+                                                (->Cached (:value prev))))}}))
 
 (defn merge
   [& sigs]
