@@ -325,15 +325,35 @@
       (async/onto-chan graph (map number [1 1 2 1 2 2 2 1 1]))
       (is (= [1 2 1 2 1] (<! (async/into [] out)))))))
 
-(deftest-async test-world-building
+(deftest-async test-world-building-with-value-source-channel-fn
   (go
-    (let [event-source (async/to-chan [[10 10]
+    (let [value-source (async/to-chan [[10 10]
                                        [20 20]
                                        [30 30]])
-          mouse-position (z/input [0 0] :mouse-position (constantly event-source))
+          mouse-position (z/input [0 0] :mouse-position (constantly value-source))
           graph (z/spawn mouse-position)
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= [[10 10] [20 20] [30 30]]
+             (<! (async/into [] out)))))))
+
+(deftest-async test-input-with-value-source-mult
+  (go
+    (let [value-source (async/chan)
+          numbers (z/input 0 :numbers (async/mult value-source))
+          graph (z/spawn numbers)
+          out (async/tap graph (chan 1 z/fresh-values))]
+      (async/onto-chan value-source [1 2 3])
+      (is (= [1 2 3]
+             (<! (async/into [] out)))))))
+
+(deftest-async test-input-with-value-source-channel
+  (go
+    (let [value-source (async/chan)
+          numbers (z/input 0 :numbers value-source)
+          graph (z/spawn numbers)
+          out (async/tap graph (chan 1 z/fresh-values))]
+      (async/onto-chan value-source [1 2 3])
+      (is (= [1 2 3]
              (<! (async/into [] out)))))))
 
 (deftest-async test-async-makes-signals-asynchronous

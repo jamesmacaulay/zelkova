@@ -68,20 +68,37 @@
           (or deps (:sources message-emitter))))
   (message-emitter [_] message-emitter))
 
-(defn values-fn->events-fn
-  [value-channel-fn topic]
+(defmulti value-source->events-fn
+  (fn [src topic]
+    (cond
+      (satisfies? async/Mult src) :mult
+      (satisfies? impl/ReadPort src) :readport
+      (ifn? src) :ifn)))
+
+(defmethod value-source->events-fn :ifn
+  [src-fn topic]
   (fn [graph opts]
-    (let [ch (value-channel-fn graph opts)]
+    (let [ch (src-fn graph opts)]
       (async/pipe ch (chan 1 (core/map (partial ->Event topic)))))))
+
+(defmethod value-source->events-fn :mult
+  [src-mult topic]
+  (value-source->events-fn (fn [_ _] (async/tap src-mult (chan)))
+                           topic))
+
+(defmethod value-source->events-fn :readport
+  [src-chan topic]
+  (value-source->events-fn (async/mult src-chan)
+                           topic))
 
 (defn input
   ([init] (input init (gen-topic)))
   ([init topic]
    (map->Signal {:init init
                  :message-emitter (event-relay #{topic})}))
-  ([init topic value-channel-fn]
-   (let [event-channel-fn (values-fn->events-fn value-channel-fn
-                                                topic)]
+  ([init topic value-channel-or-fn-or-mult]
+   (let [event-channel-fn (value-source->events-fn value-channel-or-fn-or-mult
+                                                   topic)]
      (map->Signal {:init init
                    :message-emitter (event-relay #{topic})
                    :event-sources {topic event-channel-fn}}))))
