@@ -142,19 +142,19 @@
   (map->Signal {:init init
                 :message-emitter {:sources [source]
                                   :msg-fn (fn [acc [message]]
-                                        (if (fresh? message)
-                                          (->Fresh (f (:value message) (:value acc)))
-                                          (->Cached (:value acc))))}}))
+                                            (if (fresh? message)
+                                              (->Fresh (f (:value message) (:value acc)))
+                                              (->Cached (:value acc))))}}))
 
 (defn drop-repeats
   [sig]
   (map->Signal {:init (:init sig)
                 :message-emitter {:sources [sig]
                                   :msg-fn (fn [prev [msg]]
-                                        (if (and (fresh? msg)
-                                                 (not= (:value msg) (:value prev)))
-                                          msg
-                                          (->Cached (:value prev))))}}))
+                                            (if (and (fresh? msg)
+                                                     (not= (:value msg) (:value prev)))
+                                              msg
+                                              (->Cached (:value prev))))}}))
 
 
 (defn reducep
@@ -204,9 +204,9 @@
   (map->Signal {:init (:init value-sig)
                 :message-emitter {:sources [sampler-sig value-sig]
                                   :msg-fn (fn [prev [sampler-msg value-msg]]
-                                        (if (fresh? sampler-msg)
-                                          (->Fresh (:value value-msg))
-                                          (->Cached (:value prev))))}}))
+                                            (if (fresh? sampler-msg)
+                                              (->Fresh (:value value-msg))
+                                              (->Cached (:value prev))))}}))
 
 (defn count
   [sig]
@@ -226,10 +226,10 @@
                         base)
                 :message-emitter {:sources [sig]
                                   :msg-fn (fn [prev [msg]]
-                                        (if (and (fresh? msg)
-                                                 (pred (:value msg)))
-                                          (->Fresh (:value msg))
-                                          (->Cached (:value prev))))}}))
+                                            (if (and (fresh? msg)
+                                                     (pred (:value msg)))
+                                              (->Fresh (:value msg))
+                                              (->Cached (:value prev))))}}))
 
 (defn drop-if
   [pred base sig]
