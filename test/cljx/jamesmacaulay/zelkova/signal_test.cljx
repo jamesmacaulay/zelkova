@@ -25,41 +25,41 @@
 (deftest test-signal-sources
   (let [input (z/input 0)
         foldp (z/foldp + 0 input)
-        lift (z/map vector input foldp)
-        async (z/async lift)]
+        mapped (z/map vector input foldp)
+        async (z/async mapped)]
     (are [sig sources] (= (z/signal-deps sig) sources)
          input #{}
          foldp #{input}
-         lift #{input foldp}
-         async #{lift})))
+         mapped #{input foldp}
+         async #{mapped})))
 
 (deftest test-output-node->dependency-map
   (let [input (z/input 0)
         foldp (z/foldp + 0 input)
-        lift (z/map vector input foldp)
-        async (z/async lift)]
+        mapped (z/map vector input foldp)
+        async (z/async mapped)]
     (are [out deps] (= (z/output-node->dependency-map out) deps)
          input {input #{}}
          foldp {input #{}
                 foldp #{input}}
-         lift {input #{}
-               foldp #{input}
-               lift #{input foldp}}
+         mapped {input #{}
+                 foldp #{input}
+                 mapped #{input foldp}}
          async {input #{}
                 foldp #{input}
-                lift #{input foldp}
-                async #{lift}})))
+                mapped #{input foldp}
+                async #{mapped}})))
 
 (deftest test-topsort
   (let [input (z/input 0)
         foldp (z/foldp + 0 input)
-        lift (z/map vector input foldp)
-        async (z/async lift)]
+        mapped (z/map vector input foldp)
+        async (z/async mapped)]
     (are [out sorted-sigs] (= (z/topsort out) sorted-sigs)
          input [input]
          foldp [input foldp]
-         lift [input foldp lift]
-         async [input foldp lift async])))
+         mapped [input foldp mapped]
+         async [input foldp mapped async])))
 
 (deftest-async test-wiring-things-up
   (go
@@ -90,7 +90,7 @@
       (is (= [1 2 3]
              (<! (async/into [] out)))))))
 
-(deftest-async test-lift
+(deftest-async test-map
   (go
     (let [number (event-constructor :numbers)
           in (z/input 0 :numbers)
@@ -110,10 +110,10 @@
       (async/onto-chan graph [(a 1) (b 2) (c 3) (a 10)])
       (is (= [1 3 6 15]
              (<! (async/into [] out)))))
-    (let [zero-arity-+-lift (z/map +)
-          zero-arity-vector-lift (z/map vector)]
-      (is (= 0 (:init zero-arity-+-lift)))
-      (is (= [] (:init zero-arity-vector-lift))))))
+    (let [zero-arity-+-map (z/map +)
+          zero-arity-vector-map (z/map vector)]
+      (is (= 0 (:init zero-arity-+-map)))
+      (is (= [] (:init zero-arity-vector-map))))))
 
 (deftest-async test-foldp
   (go
