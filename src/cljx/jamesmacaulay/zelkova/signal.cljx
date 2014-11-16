@@ -7,7 +7,8 @@
             [clojure.core.async.impl.protocols :as impl]
             [clojure.core.async.impl.channels :as channels]
             [jamesmacaulay.async-tools.core :as tools]
-            [alandipert.kahn :as kahn]))
+            [alandipert.kahn :as kahn]
+            [clojure.pprint :refer [pprint]]))
 
 #+cljs
 (ns jamesmacaulay.zelkova.signal
@@ -172,9 +173,10 @@
 (defn async
   [source]
   (let [topic source
-        msgs->events (comp (filter fresh?)
+        msgs->events (comp cat
+                           (filter fresh?)
                            (core/map (fn [msg]
-                                  (->Event topic (:value msg)))))
+                                       (->Event topic (:value msg)))))
         events-channel-fn (fn [live-graph _]
                             (async/tap (get (:mult-map live-graph) source)
                                        (chan 1 msgs->events)))]
@@ -252,7 +254,8 @@
 
 ; helpers:
 
-(def fresh-values (comp (filter fresh?)
+(def fresh-values (comp cat
+                        (filter fresh?)
                         (core/map :value)))
 
 ; compiling graphs:
@@ -320,15 +323,43 @@
        (mapv (partial tap-signal mult-map))
        (async/map vector)))
 
+(defn- ensure-sequential
+  [x-or-xs]
+  (if (sequential? x-or-xs) x-or-xs [x-or-xs]))
+
+(defn pad
+  [msg-lists]
+  (if (>= 1 (core/count msg-lists))
+    msg-lists
+    (let [max-count (reduce max (core/map core/count msg-lists))
+          pad (fn [msgs]
+                (->> [msgs (-> msgs last :value ->Cached repeat)]
+                     (into [] (comp cat (take max-count)))))]
+      (core/map pad msg-lists))))
+
+(defn transpose
+  [msg-lists]
+  (apply core/map vector msg-lists))
+
+(defn wrap-msg-fn
+  [msg-fn]
+  (let [msg-fn (comp ensure-sequential msg-fn)]
+    (fn [prev msg-payloads]
+      (let [time-series (-> msg-payloads pad transpose)]
+        (->> time-series
+             (reductions msg-fn prev)
+             (into [] (comp cat (drop 1))))))))
+
 (defn- spawn-message-loop!
   [init msg-fn c-in c-out]
-  (go-loop [prev (->Fresh init)]
-    (let [in-val (<! c-in)]
-      (if (nil? in-val)
-        (async/close! c-out)
-        (let [out-val (msg-fn prev in-val)]
-          (>! c-out out-val)
-          (recur out-val))))))
+  (let [wrapped-msg-fn (wrap-msg-fn msg-fn)]
+    (go-loop [prev (->Fresh init)]
+      (let [in-val (<! c-in)]
+        (if (nil? in-val)
+          (async/close! c-out)
+          (let [out-val (wrapped-msg-fn prev in-val)]
+            (>! c-out out-val)
+            (recur (last out-val))))))))
 
 (defn- build-message-mult
   [mult-map signal]
@@ -392,7 +423,7 @@
   CompiledGraph
   (init [g] (:init (:output-signal g)))
   (spawn* [g opts]
-    (let [events-channel (chan)
+    (let [events-channel (chan 1 (core/map ensure-sequential))
           events-mult (async/mult events-channel)
           mult-map (build-message-mult-map (:sorted-signals g) events-mult)]
       (-> g

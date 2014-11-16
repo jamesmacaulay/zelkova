@@ -70,8 +70,7 @@
           pairs (z/map vector numbers-input letters-input)
           live-graph (z/spawn pairs)
           output (async/tap live-graph
-                            (chan 1 (comp (filter z/fresh?)
-                                          (map :value))))]
+                            (chan 1 z/fresh-values))]
       (async/onto-chan live-graph
                        [(number 1)
                         (letter :b)
