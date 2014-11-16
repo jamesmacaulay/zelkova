@@ -111,6 +111,24 @@
                   :message-emitter {:sources [:events]
                                     :msg-fn (constantly cached)}})))
 
+(defn pipeline
+  [xform base sig]
+  (let [reducer ((comp (core/map :value)
+                       xform
+                       (core/map ->Fresh))
+                 conj)
+        msg-fn (fn [prev [msg :as msg-in-seq]]
+                 (if (fresh? msg)
+                   (reduce reducer [] msg-in-seq)
+                   (->Cached (:value prev))))
+        pipelined-init-msg (->> (:init sig) ->Fresh vector (msg-fn nil) last)
+        init-val (if (nil? pipelined-init-msg)
+                   base
+                   (:value pipelined-init-msg))]
+    (map->Signal {:init init-val
+                  :message-emitter {:sources [sig]
+                                    :msg-fn msg-fn}})))
+
 (defn mapseq
   [f sources]
   (if (empty? sources)
@@ -308,20 +326,7 @@
   (let [sorted-signals (topsort output-signal)]
     (->CompiledGraph output-signal sorted-signals)))
 
-
-; wiring up channels:
-
-
-(defn- tap-signal
-  [mult-map source]
-  (let [mult (get mult-map source)]
-    (async/tap mult (chan))))
-
-(defn- tap-signals
-  [mult-map sources]
-  (->> sources
-       (mapv (partial tap-signal mult-map))
-       (async/map vector)))
+; dealing with multiple outputs:
 
 (defn- ensure-sequential
   [x-or-xs]
@@ -345,10 +350,26 @@
   [msg-fn]
   (let [msg-fn (comp ensure-sequential msg-fn)]
     (fn [prev msg-payloads]
-      (let [time-series (-> msg-payloads pad transpose)]
-        (->> time-series
-             (reductions msg-fn prev)
-             (into [] (comp cat (drop 1))))))))
+      (let [input-series (-> msg-payloads pad transpose)
+            output-series (->> input-series
+                               (reductions msg-fn prev)
+                               (into [] (comp cat (drop 1))))]
+        (if (empty? output-series)
+          [(->Cached (:value prev))]
+          output-series)))))
+
+; wiring up channels:
+
+(defn- tap-signal
+  [mult-map source]
+  (let [mult (get mult-map source)]
+    (async/tap mult (chan))))
+
+(defn- tap-signals
+  [mult-map sources]
+  (->> sources
+       (mapv (partial tap-signal mult-map))
+       (async/map vector)))
 
 (defn- spawn-message-loop!
   [init msg-fn c-in c-out]

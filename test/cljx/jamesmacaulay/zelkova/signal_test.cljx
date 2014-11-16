@@ -380,3 +380,55 @@
                           :b (z/input 2 :b)})]
     (is (= {:a 1 :b 2}
            (:init tmpl)))))
+
+(deftest-async test-pipeline-works-with-transducers
+  (go
+    (let [ch (async/chan)
+          graph (->> ch
+                     (z/input [0] :number-vectors)
+                     (z/pipeline (comp cat
+                                       (map inc)
+                                       (filter odd?))
+                                 99)
+                     (z/spawn))
+          out (async/tap graph (chan 1 z/fresh-values))]
+      (is (= 1 (z/init graph)))
+      (async/onto-chan ch [[1 2 3]
+                           [4 5 6 7]
+                           [8 9]
+                           [10]])
+      (is (= [3 5 7 9 11]
+             (<! (async/into [] out)))))))
+
+(deftest test-pipeline-uses-last-message-in-batch-for-init
+  (is (= 4 (->> (z/input [1 2 3 4] :number-vectors)
+                (z/pipeline cat 0)
+                (z/init)))))
+
+(deftest test-pipeline-falls-back-to-base-value-for-init
+  (is (= 99 (->> (z/input 0 :numbers)
+                 (z/pipeline (filter odd?) 99)
+                 (z/init)))))
+
+(deftest-async test-pipeline-includes-init-in-dropping-and-taking
+  (go
+    (let [ch (async/chan)
+          graph (->> ch
+                     (z/input 0 :numbers)
+                     (z/pipeline (drop 3) 99)
+                     (z/spawn))
+          out (async/tap graph (chan 1 z/fresh-values))]
+      (is (= 99 (z/init graph)))
+      (async/onto-chan ch [1 2 3 4])
+      (is (= [3 4]
+             (<! (async/into [] out)))))
+    (let [ch (async/chan)
+          graph (->> ch
+                     (z/input 0 :numbers)
+                     (z/pipeline (take 3) 99)
+                     (z/spawn))
+          out (async/tap graph (chan 1 z/fresh-values))]
+      (is (= 0 (z/init graph)))
+      (async/onto-chan ch [1 2 3 4])
+      (is (= [1 2]
+             (<! (async/into [] out)))))))
