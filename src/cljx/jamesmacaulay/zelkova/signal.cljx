@@ -22,10 +22,6 @@
             [alandipert.kahn :as kahn])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
-(defn gen-topic
-  []
-  (keyword (gensym)))
-
 (defrecord Event
   [topic value])
 
@@ -92,7 +88,7 @@
                            topic))
 
 (defn input
-  ([init] (input init (gen-topic)))
+  ([init] (input init (keyword (gensym))))
   ([init topic]
    (map->Signal {:init init
                  :message-emitter (event-relay #{topic})}))
