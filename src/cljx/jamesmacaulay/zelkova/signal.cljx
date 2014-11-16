@@ -56,9 +56,8 @@
     {:sources [:events]
      :relayed-event-topics topics
      :msg-fn (fn [prev [event]]
-               (if (contains? topics (:topic event))
-                 (->Fresh (:value event))
-                 (->Cached (:value prev))))}))
+               (when (contains? topics (:topic event))
+                 (->Fresh (:value event))))}))
 
 (defrecord Signal
   [init message-emitter deps event-sources]
@@ -118,9 +117,8 @@
                        (core/map ->Fresh))
                  conj)
         msg-fn (fn [prev [msg :as msg-in-seq]]
-                 (if (fresh? msg)
-                   (reduce reducer [] msg-in-seq)
-                   (->Cached (:value prev))))
+                 (when (fresh? msg)
+                   (reduce reducer [] msg-in-seq)))
         pipelined-init-msg (->> (:init sig) ->Fresh vector (msg-fn nil) last)
         init-val (if (nil? pipelined-init-msg)
                    base
@@ -135,9 +133,8 @@
     (constant (f))
     (let [sources (vec sources)
           emit-message (fn [prev messages]
-                         (if (some fresh? messages)
-                           (->Fresh (apply f (mapv :value messages)))
-                           (->Cached (:value prev))))]
+                         (when (some fresh? messages)
+                           (->Fresh (apply f (mapv :value messages)))))]
       (map->Signal {:init (->> sources
                                (mapv (comp ->Fresh :init))
                                (emit-message nil)
@@ -161,19 +158,18 @@
   (map->Signal {:init init
                 :message-emitter {:sources [source]
                                   :msg-fn (fn [acc [message]]
-                                            (if (fresh? message)
-                                              (->Fresh (f (:value message) (:value acc)))
-                                              (->Cached (:value acc))))}}))
+                                            (when (fresh? message)
+                                              (->Fresh (f (:value message)
+                                                          (:value acc)))))}}))
 
 (defn drop-repeats
   [sig]
   (map->Signal {:init (:init sig)
                 :message-emitter {:sources [sig]
                                   :msg-fn (fn [prev [msg]]
-                                            (if (and (fresh? msg)
-                                                     (not= (:value msg) (:value prev)))
-                                              msg
-                                              (->Cached (:value prev))))}}))
+                                            (when (and (fresh? msg)
+                                                       (not= (:value msg) (:value prev)))
+                                              msg))}}))
 
 
 (defn reducep
@@ -208,8 +204,7 @@
   (map->Signal {:init (:init (first sigs))
                 :message-emitter {:sources sigs
                                   :msg-fn (fn [prev messages]
-                                            (or (first (filter fresh? messages))
-                                                (->Cached (:value prev))))}}))
+                                            (first (filter fresh? messages)))}}))
 
 (defn merge
   [& sigs]
@@ -224,9 +219,8 @@
   (map->Signal {:init (:init value-sig)
                 :message-emitter {:sources [sampler-sig value-sig]
                                   :msg-fn (fn [prev [sampler-msg value-msg]]
-                                            (if (fresh? sampler-msg)
-                                              (->Fresh (:value value-msg))
-                                              (->Cached (:value prev))))}}))
+                                            (when (fresh? sampler-msg)
+                                              (->Fresh (:value value-msg))))}}))
 
 (defn count
   [sig]
@@ -246,10 +240,9 @@
                         base)
                 :message-emitter {:sources [sig]
                                   :msg-fn (fn [prev [msg]]
-                                            (if (and (fresh? msg)
-                                                     (pred (:value msg)))
-                                              (->Fresh (:value msg))
-                                              (->Cached (:value prev))))}}))
+                                            (when (and (fresh? msg)
+                                                       (pred (:value msg)))
+                                              (->Fresh (:value msg))))}}))
 
 (defn drop-if
   [pred base sig]
@@ -330,9 +323,12 @@
 
 (defn- ensure-sequential
   [x-or-xs]
-  (if (sequential? x-or-xs) x-or-xs [x-or-xs]))
+  (cond
+    (sequential? x-or-xs) x-or-xs
+    (nil? x-or-xs) []
+    :else [x-or-xs]))
 
-(defn pad
+(defn- pad
   [msg-lists]
   (if (>= 1 (core/count msg-lists))
     msg-lists
@@ -342,11 +338,11 @@
                      (into [] (comp cat (take max-count)))))]
       (core/map pad msg-lists))))
 
-(defn transpose
+(defn- transpose
   [msg-lists]
   (apply core/map vector msg-lists))
 
-(defn wrap-msg-fn
+(defn- wrap-msg-fn
   [msg-fn]
   (let [msg-fn (comp ensure-sequential msg-fn)]
     (fn [prev msg-payloads]
