@@ -21,24 +21,38 @@
             [alandipert.kahn :as kahn])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
-; Events come in from "the outside world" and get transformed into Messages by input signal nodes
-(defrecord Event
-  [topic value])
+(defprotocol BoxedValueProtocol
+  (value [boxed]))
 
-(defprotocol Message
+(defprotocol EventProtocol
+  "Events come in from \"the outside world\" and get transformed into Messages by input signal nodes"
+  (topic [event]))
+
+(defprotocol MessageProtocol
   "Messages are propagated through the signal graph, and can either be \"fresh\" or \"cached\"."
   (fresh? [msg] "returns `true` if the message represents a fresh value, `false` otherwise"))
 
-; a box for a "fresh" value
+(defrecord Event
+  [topic value]
+  BoxedValueProtocol
+  (value [_] value)
+  EventProtocol
+  (topic [_] topic))
+
+; a message representing a "fresh" signal value
 (defrecord Fresh
   [value]
-  Message
+  BoxedValueProtocol
+  (value [_] value)
+  MessageProtocol
   (fresh? [_] true))
 
-; a box for a "cached" value
+; a message representing a "cached" signal value
 (defrecord Cached
   [value]
-  Message
+  BoxedValueProtocol
+  (value [_] value)
+  MessageProtocol
   (fresh? [_] false))
 
 (defprotocol SignalProtocol
@@ -63,7 +77,7 @@
      :relayed-event-topics topics
      :msg-fn (fn [prev [event]]
                (when (contains? topics (:topic event))
-                 (->Fresh (:value event))))}))
+                 (->Fresh (value event))))}))
 
 (defrecord Signal
   [init message-emitter deps event-sources]
@@ -144,7 +158,7 @@
   be used as a fallback, and then two more values will be dropped before fresh
   values start being emitted."
   [xform base sig]
-  (let [reducer ((comp (core/map :value)
+  (let [reducer ((comp (core/map value)
                        xform
                        (core/map ->Fresh))
                  conj)
@@ -154,7 +168,7 @@
         pipelined-init-msg (->> (:init sig) ->Fresh vector (msg-fn nil) last)
         init-val (if (nil? pipelined-init-msg)
                    base
-                   (:value pipelined-init-msg))]
+                   (value pipelined-init-msg))]
     (map->Signal {:init init-val
                   :message-emitter {:sources [sig]
                                     :msg-fn msg-fn}})))
@@ -168,11 +182,11 @@
     (let [sources (vec sources)
           emit-message (fn [prev messages]
                          (when (some fresh? messages)
-                           (->Fresh (apply f (mapv :value messages)))))]
+                           (->Fresh (apply f (mapv value messages)))))]
       (map->Signal {:init (->> sources
                                (mapv (comp ->Fresh :init))
                                (emit-message nil)
-                               :value)
+                               value)
                     :message-emitter {:sources sources
                                       :msg-fn emit-message}}))))
 
@@ -203,14 +217,26 @@
                 :message-emitter {:sources [source]
                                   :msg-fn (fn [acc [message]]
                                             (when (fresh? message)
-                                              (->Fresh (f (:value message)
-                                                          (:value acc)))))}}))
+                                              (->Fresh (f (value message)
+                                                          (value acc)))))}}))
+
+(defn drop-repeats
+  "Returns a signal which relays values of `sig`, but drops repeated equal values."
+  [sig]
+  (map->Signal {:init (:init sig)
+                :message-emitter {:sources [sig]
+                                  :msg-fn (fn [prev [msg]]
+                                            (when (and (fresh? msg)
+                                                       (not= (value msg) (value prev)))
+                                              msg))}}))
 
 (defn reducep
-  "Create a past-dependent signal like `foldp`, but calls `f` with the arguments
-  reversed to align with Clojure's `reduce`: the first argument is the accumulator,
-  and the second is the current value of `source`. If `init` is omitted, the initial
-  value of the new signal will be obtained by calling `f` with no arguments."
+  "Create a past-dependent signal like `foldp`, with a few differences:
+    * calls `f` with the arguments reversed to align with Clojure's `reduce`:
+    the first argument is the accumulator, the second is the current value of `source`.
+    * if `init` is omitted, the initial value of the new signal will be obtained by
+    calling `f` with no arguments.
+    * successive equal values of the returned signal are dropped with `drop-repeats`"
   ([f source] (reducep f (f) source))
   ([f init source]
    (->> source
@@ -223,16 +249,6 @@
   ([xform f init source]
    (reducep (xform f) init source)))
 
-(defn drop-repeats
-  "Returns a signal which relays values of `sig`, but drops repeated equal values."
-  [sig]
-  (map->Signal {:init (:init sig)
-                :message-emitter {:sources [sig]
-                                  :msg-fn (fn [prev [msg]]
-                                            (when (and (fresh? msg)
-                                                       (not= (:value msg) (:value prev)))
-                                              msg))}}))
-
 (defn async
   "Returns an \"asynchronous\" version of `source`, splitting off a new subgraph which
   does not maintain consistent event ordering relative to the main graph. In exchange,
@@ -244,7 +260,7 @@
         msgs->events (comp cat
                            (filter fresh?)
                            (core/map (fn [msg]
-                                       (->Event topic (:value msg)))))
+                                       (->Event topic (value msg)))))
         events-channel-fn (fn [live-graph _]
                             (async/tap (get (:mult-map live-graph) source)
                                        (chan 1 msgs->events)))]
@@ -289,7 +305,7 @@
                 :message-emitter {:sources [sampler-sig value-sig]
                                   :msg-fn (fn [prev [sampler-msg value-msg]]
                                             (when (fresh? sampler-msg)
-                                              (->Fresh (:value value-msg))))}}))
+                                              (->Fresh (value value-msg))))}}))
 
 (defn count
   "Returns a signal whose values are the number of fresh values emitted so far from
@@ -320,8 +336,8 @@
                 :message-emitter {:sources [sig]
                                   :msg-fn (fn [prev [msg]]
                                             (when (and (fresh? msg)
-                                                       (pred (:value msg)))
-                                              (->Fresh (:value msg))))}}))
+                                                       (pred (value msg)))
+                                              (->Fresh (value msg))))}}))
 
 (defn drop-if
   "Like `keep-if`, but drops values which match the predicate."
@@ -353,7 +369,7 @@
   fresh-values
   (comp cat
         (filter fresh?)
-        (core/map :value)))
+        (core/map value)))
 
 ; compiling graphs:
 
@@ -429,7 +445,7 @@
     msg-batches
     (let [max-count (reduce max (core/map core/count msg-batches))
           pad (fn [msgs]
-                (->> [msgs (-> msgs last :value ->Cached repeat)]
+                (->> [msgs (-> msgs last value ->Cached repeat)]
                      (into [] (comp cat (take max-count)))))]
       (core/map pad msg-batches))))
 
@@ -455,7 +471,7 @@
                                (reductions msg-fn prev)
                                (into [] (comp cat (drop 1))))]
         (if (empty? output-series)
-          [(->Cached (:value prev))]
+          [(->Cached (value prev))]
           output-series)))))
 
 ; wiring up channels:
