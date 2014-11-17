@@ -32,6 +32,7 @@
   "Messages are propagated through the signal graph, and can either be \"fresh\" or \"cached\"."
   (fresh? [msg] "returns `true` if the message represents a fresh value, `false` otherwise"))
 
+; an external event
 (defrecord Event
   [topic value]
   BoxedValueProtocol
