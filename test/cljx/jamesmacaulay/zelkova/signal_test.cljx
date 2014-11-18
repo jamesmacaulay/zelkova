@@ -410,25 +410,25 @@
                  (z/pipeline (filter odd?) 99)
                  (z/init)))))
 
-(deftest-async test-pipeline-includes-init-in-dropping-and-taking
+(deftest-async test-pipeline-resets-transducer-state-on-every-item-making-stateful-transducers-pretty-much-useless
   (go
     (let [ch (async/chan)
           graph (->> ch
                      (z/input 0 :numbers)
-                     (z/pipeline (drop 3) 99)
+                     (z/pipeline (drop 1) 99)
                      (z/spawn))
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= 99 (z/init graph)))
       (async/onto-chan ch [1 2 3 4])
-      (is (= [3 4]
+      (is (= []
              (<! (async/into [] out)))))
     (let [ch (async/chan)
           graph (->> ch
                      (z/input 0 :numbers)
-                     (z/pipeline (take 3) 99)
+                     (z/pipeline (take 1) 99)
                      (z/spawn))
           out (async/tap graph (chan 1 z/fresh-values))]
       (is (= 0 (z/init graph)))
       (async/onto-chan ch [1 2 3 4])
-      (is (= [1 2]
+      (is (= [1 2 3 4]
              (<! (async/into [] out)))))))

@@ -147,25 +147,19 @@
                                     :msg-fn (constantly cached)}})))
 
 (defn pipeline
-  "Takes a transducer `xform`, a fallback value `base`, and a signal `sig`.
-  Returns a new signal which pipes values from `sig` through `xform`. Because
-  transducers may filter out values, you must provide a `base` which will be
-  used as the derived signal's initial value if the initial value of `sig` ends
+  "Takes a stateless transducer `xform`, a fallback value `base`, and a signal
+  `sig`. Returns a new signal which pipes values from `sig` through `xform`.
+  Because transducers may filter out values, you must provide a `base` which will
+  be used as the derived signal's initial value if the initial value of `sig` ends
   up being filtered. If multiple values are emitted from the transduction of the
   initial value of `sig`, then the initial value of the new signal will be the
-  _last_ of those emitted. Stateful transducers carry state starting from the
-  computation of the new signal's initial value. So for example a `(drop 3)`
-  transducer will mean that the initial value will be filtered, `base` will
-  be used as a fallback, and then two more values will be dropped before fresh
-  values start being emitted."
+  _last_ of those emitted. Stateful transducers will give unexpected results and
+  are not supported."
   [xform base sig]
-  (let [reducer ((comp (core/map value)
-                       xform
-                       (core/map ->Fresh))
-                 conj)
+  (let [xform' (comp (core/map value) xform (core/map ->Fresh))
         msg-fn (fn [prev [msg :as msg-in-seq]]
                  (when (fresh? msg)
-                   (reduce reducer [] msg-in-seq)))
+                   (sequence xform' msg-in-seq)))
         pipelined-init-msg (->> (:init sig) ->Fresh vector (msg-fn nil) last)
         init-val (if (nil? pipelined-init-msg)
                    base
