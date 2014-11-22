@@ -1,20 +1,17 @@
 #+clj
 (ns jamesmacaulay.zelkova.time
   (:refer-clojure :exclude [second])
-  (:require [jamesmacaulay.zelkova.signal :as z]
-            [cljs.core.async :as async :refer [>! <! go go-loop]]))
+  (:require [jamesmacaulay.zelkova.platform.time :as t]
+            [jamesmacaulay.zelkova.signal :as z]
+            [clojure.core.async :as async :refer [>! <! go go-loop]]))
 
 #+cljs
 (ns jamesmacaulay.zelkova.time
   (:refer-clojure :exclude [second])
-  (:require [jamesmacaulay.zelkova.signal :as z]
+  (:require [jamesmacaulay.zelkova.platform.time :as t]
+            [jamesmacaulay.zelkova.signal :as z]
             [cljs.core.async :as async :refer [>! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
-
-#+clj
-(defn now [] (System/currentTimeMillis))
-#+cljs
-(defn now [] (.valueOf (js/Date.)))
 
 (def millisecond 1)
 (def second 1000)
@@ -31,10 +28,10 @@
   (fn [graph opts]
     (let [ms-per-frame (/ 1000 n)
           out (async/chan)]
-      (go-loop [t (now)
+      (go-loop [t (t/now)
                 error 0]
         (<! (async/timeout (- ms-per-frame error)))
-        (let [new-t (now)
+        (let [new-t (t/now)
               diff (- new-t t)]
           (>! out diff)
           (recur new-t (+ error (- new-t t ms-per-frame)))))
@@ -48,14 +45,14 @@
   [ms]
   (fn [graph opts]
     (let [out (async/chan)]
-      (go-loop [t (now)
+      (go-loop [t (t/now)
                 error 0]
         (<! (async/timeout (- ms error)))
-        (let [new-t (now)]
+        (let [new-t (t/now)]
           (>! out new-t)
           (recur new-t (+ error (- new-t t ms)))))
       out)))
 
 (defn every
   [ms]
-  (z/input (now) [::every ms] (every-channel-fn ms)))
+  (z/input (t/now) [::every ms] (every-channel-fn ms)))
