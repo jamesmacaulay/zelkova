@@ -2,7 +2,7 @@
 (ns jamesmacaulay.zelkova.signal
   (:refer-clojure :exclude [map merge count])
   (:require [clojure.core :as core]
-            [clojure.core.async :as async :refer [go go-loop chan <! >!]]
+            [clojure.core.async :as async :refer [go go-loop <! >!]]
             [clojure.core.async.impl.protocols :as async-impl]
             [jamesmacaulay.zelkova.impl.signal :as impl]))
 
@@ -10,7 +10,7 @@
 (ns jamesmacaulay.zelkova.signal
   (:refer-clojure :exclude [map merge count])
   (:require [cljs.core :as core]
-            [cljs.core.async :as async :refer [chan <! >!]]
+            [cljs.core.async :as async :refer [<! >!]]
             [cljs.core.async.impl.protocols :as async-impl]
             [jamesmacaulay.zelkova.impl.signal :as impl])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
@@ -42,11 +42,11 @@
   [src-fn topic]
   (fn [graph opts]
     (let [ch (src-fn graph opts)]
-      (async/pipe ch (chan 1 (core/map (partial impl/->Event topic)))))))
+      (async/pipe ch (async/chan 1 (core/map (partial impl/->Event topic)))))))
 
 (defmethod value-source->events-fn :mult
   [src-mult topic]
-  (value-source->events-fn (fn [_ _] (async/tap src-mult (chan)))
+  (value-source->events-fn (fn [_ _] (async/tap src-mult (async/chan)))
                            topic))
 
 (defmethod value-source->events-fn :readport
@@ -67,8 +67,7 @@
    (impl/map->Signal {:init init
                       :message-emitter (event-relay topic)}))
   ([init topic value-source]
-   (let [event-channel-fn (value-source->events-fn value-source
-                                                   topic)]
+   (let [event-channel-fn (value-source->events-fn value-source topic)]
      (impl/map->Signal {:init init
                         :message-emitter (event-relay topic)
                         :event-sources {topic event-channel-fn}}))))
@@ -193,7 +192,7 @@
                                        (impl/->Event topic (impl/value msg)))))
         events-channel-fn (fn [live-graph _]
                             (async/tap (get (:mult-map live-graph) source)
-                                       (chan 1 msgs->events)))]
+                                       (async/chan 1 msgs->events)))]
     (impl/map->Signal {:init (:init source)
                        :deps [source]
                        :event-sources {topic events-channel-fn}
