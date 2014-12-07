@@ -15,15 +15,6 @@
             [jamesmacaulay.zelkova.impl.signal :as impl])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
-(defn- event-relay
-  "takes a topic, and returns an input signal which relays matching events as messages to its children"
-  [topic]
-  {:sources [:events]
-   :relayed-event-topic topic
-   :msg-fn (fn [prev [event]]
-             (when (= topic (impl/topic event))
-               (impl/->Fresh (impl/value event))))})
-
 (defmulti ^:private value-source->events-fn
   "Takes some asynchronous `source` of values, plus an event `topic`, and returns
   an event-source function. `source` may be one of the following:
@@ -64,12 +55,12 @@
     * a mult of some such value channel"
   ([init] (input init (keyword (gensym))))
   ([init topic]
-   (impl/build-signal (event-relay topic)
-                      {:init init}))
+   (impl/build-signal {:init init
+                       :relayed-event-topic topic}))
   ([init topic value-source]
    (let [event-channel-fn (value-source->events-fn value-source topic)]
-     (impl/build-signal (event-relay topic)
-                        {:init init
+     (impl/build-signal {:init init
+                         :relayed-event-topic topic
                          :event-sources {topic event-channel-fn}}))))
 
 (defn constant
@@ -193,9 +184,9 @@
         events-channel-fn (fn [live-graph _]
                             (async/tap (get (:mult-map live-graph) source)
                                        (async/chan 1 msgs->events)))]
-    (impl/build-signal (event-relay topic)
-                       {:init (:init source)
+    (impl/build-signal {:init (:init source)
                         :deps [source]
+                        :relayed-event-topic topic
                         :event-sources {topic events-channel-fn}})))
 
 (defn mergeseq

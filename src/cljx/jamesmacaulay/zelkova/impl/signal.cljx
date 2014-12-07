@@ -66,9 +66,23 @@
           (filter signal?)
           (or deps sources))))
 
+(defn- setup-event-relay
+  "Takes a topic, and returns an input signal which relays matching events as messages to its children"
+  [opts]
+  (if-let [relayed-topic (:relayed-event-topic opts)]
+    (assoc opts
+      :sources [:events]
+      :msg-fn (fn [prev [event]]
+                (when (= relayed-topic (topic event))
+                  (->Fresh (value event)))))
+    opts))
+
 (defn build-signal
-  [& opt-maps]
-  (map->Signal (apply merge opt-maps)))
+  "Takes a map of opts and returns a signal."
+  [opts]
+  (-> opts
+      (setup-event-relay)
+      (map->Signal)))
 
 (def ^{:doc "A transducer which takes in batches of signal graph messages and pipes out fresh values."}
   fresh-values
