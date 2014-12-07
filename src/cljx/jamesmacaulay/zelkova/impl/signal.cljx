@@ -1,6 +1,7 @@
 #+clj
 (ns jamesmacaulay.zelkova.impl.signal
   (:require [jamesmacaulay.async-tools.core :as tools]
+            [jamesmacaulay.zelkova.platform.time :as time]
             [clojure.zip :as zip]
             [alandipert.kahn :as kahn]
             [clojure.core.async :as async :refer [go go-loop <! >!]]
@@ -9,6 +10,7 @@
 #+cljs
 (ns jamesmacaulay.zelkova.impl.signal
   (:require [jamesmacaulay.async-tools.core :as tools]
+            [jamesmacaulay.zelkova.platform.time :as time]
             [clojure.zip :as zip]
             [alandipert.kahn :as kahn]
             [cljs.core.async :as async :refer [<! >!]]
@@ -18,37 +20,65 @@
 (defprotocol BoxedValueProtocol
   (value [boxed]))
 
+(defprotocol HasOriginEvent
+  (origin-event [x]))
+
 (defprotocol EventProtocol
   "Events come in from \"the outside world\" and get transformed into Messages by input signal nodes"
-  (topic [event]))
+  (topic [event])
+  (timestamp [event])
+  (record-timestamp [event timestamp]))
 
 (defprotocol MessageProtocol
   "Messages are propagated through the signal graph, and can either be \"fresh\" or \"cached\"."
-  (fresh? [msg] "returns `true` if the message represents a fresh value, `false` otherwise"))
+  (fresh? [msg] "returns `true` if the message represents a fresh value, `false` otherwise")
+  (record-origin-event [msg e]))
 
 ; an external event
 (defrecord Event
-  [topic value]
+  [topic value timestamp]
   BoxedValueProtocol
   (value [_] value)
+  HasOriginEvent
+  (origin-event [e] e)
   EventProtocol
-  (topic [_] topic))
+  (topic [_] topic)
+  (timestamp [_] timestamp)
+  (record-timestamp [e t] (assoc e :timestamp t)))
+
+(defn make-event
+  [topic value]
+  (->Event topic value nil))
 
 ; a message representing a "fresh" signal value
 (defrecord Fresh
-  [value]
+  [value origin-event]
   BoxedValueProtocol
   (value [_] value)
+  HasOriginEvent
+  (origin-event [_] origin-event)
   MessageProtocol
-  (fresh? [_] true))
+  (fresh? [_] true)
+  (record-origin-event [m e] (assoc m :origin-event e)))
 
 ; a message representing a "cached" signal value
 (defrecord Cached
-  [value]
+  [value origin-event]
   BoxedValueProtocol
   (value [_] value)
+  HasOriginEvent
+  (origin-event [_] origin-event)
   MessageProtocol
-  (fresh? [_] false))
+  (fresh? [_] false)
+  (record-origin-event [m e] (assoc m :origin-event e)))
+
+(defn fresh
+  ([value] (->Fresh value nil))
+  ([value event] (->Fresh value event)))
+
+(defn cached
+  ([value] (->Cached value nil))
+  ([value event] (->Cached value event)))
 
 (defprotocol SignalProtocol
   (signal-deps [s] "returns the set of \"parent\" signal which this signal depends on"))
@@ -74,10 +104,10 @@
       :sources [:events]
       :msg-fn (fn [prev [event]]
                 (when (= relayed-topic (topic event))
-                  (->Fresh (value event)))))
+                  (fresh (value event)))))
     opts))
 
-(defn build-signal
+(defn make-signal
   "Takes a map of opts and returns a signal."
   [opts]
   (-> opts
@@ -164,7 +194,7 @@
     msg-batches
     (let [max-count (reduce max (map count msg-batches))
           pad (fn [msgs]
-                (->> [msgs (-> msgs last value ->Cached repeat)]
+                (->> [msgs (-> msgs last value cached repeat)]
                      (into [] (comp cat (take max-count)))))]
       (map pad msg-batches))))
 
@@ -185,12 +215,15 @@
   [msg-fn]
   (let [msg-fn (comp ensure-sequential msg-fn)]
     (fn [prev msg-batches]
-      (let [input-series (-> msg-batches pad transpose)
+      (let [event (-> msg-batches ffirst origin-event)
+            input-series (-> msg-batches pad transpose)
             output-series (->> input-series
                                (reductions msg-fn prev)
-                               (into [] (comp cat (drop 1))))]
+                               (into [] (comp (drop 1)
+                                              cat
+                                              (map #(record-origin-event % event)))))]
         (if (empty? output-series)
-          [(->Cached (value prev))]
+          [(cached (value prev) event)]
           output-series)))))
 
 ; wiring up channels:
@@ -209,7 +242,7 @@
 (defn- spawn-message-loop!
   [init msg-fn c-in c-out]
   (let [wrapped-msg-fn (wrap-msg-fn msg-fn)]
-    (go-loop [prev (->Fresh init)]
+    (go-loop [prev (fresh init)]
       (let [in-val (async/<! c-in)]
         (if (nil? in-val)
           (async/close! c-out)
@@ -265,6 +298,12 @@
   (spawn* [x opts])
   (pipe-to-atom* [x a ks]))
 
+(def ^:private events-xform
+  (map (comp (partial map
+                      (fn [event]
+                        (record-timestamp event (time/now))))
+             ensure-sequential)))
+
 (extend-protocol SignalLike
   LiveChannelGraph
   (init [g] (init (:compiled-graph g)))
@@ -278,7 +317,7 @@
   CompiledGraph
   (init [g] (:init (:output-signal g)))
   (spawn* [g opts]
-    (let [events-channel (async/chan 1 (map ensure-sequential))
+    (let [events-channel (async/chan 1 events-xform)
           events-mult (async/mult events-channel)
           mult-map (build-message-mult-map (:sorted-signals g) events-mult)]
       (-> g
