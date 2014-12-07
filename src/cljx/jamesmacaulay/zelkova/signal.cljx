@@ -16,14 +16,13 @@
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (defn- event-relay
-  "takes a sequence of topics, and returns an input signal which relays matching events as messages to its children"
-  [topics]
-  (let [topics (if (set? topics) topics (set topics))]
-    {:sources [:events]
-     :relayed-event-topics topics
-     :msg-fn (fn [prev [event]]
-               (when (contains? topics (impl/topic event))
-                 (impl/->Fresh (impl/value event))))}))
+  "takes a topic, and returns an input signal which relays matching events as messages to its children"
+  [topic]
+  {:sources [:events]
+   :relayed-event-topic topic
+   :msg-fn (fn [prev [event]]
+             (when (= topic (impl/topic event))
+               (impl/->Fresh (impl/value event))))})
 
 (defmulti ^:private value-source->events-fn
   "Takes some asynchronous `source` of values, plus an event `topic`, and returns
@@ -66,12 +65,12 @@
   ([init] (input init (keyword (gensym))))
   ([init topic]
    (impl/map->Signal {:init init
-                      :message-emitter (event-relay #{topic})}))
+                      :message-emitter (event-relay topic)}))
   ([init topic value-source]
    (let [event-channel-fn (value-source->events-fn value-source
                                                    topic)]
      (impl/map->Signal {:init init
-                        :message-emitter (event-relay #{topic})
+                        :message-emitter (event-relay topic)
                         :event-sources {topic event-channel-fn}}))))
 
 (defn constant
@@ -198,7 +197,7 @@
     (impl/map->Signal {:init (:init source)
                        :deps [source]
                        :event-sources {topic events-channel-fn}
-                       :message-emitter (event-relay #{topic})})))
+                       :message-emitter (event-relay topic)})))
 
 (defn mergeseq
   "Takes a sequence of signals `sigs`, and returns a new signal which relays fresh
