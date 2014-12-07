@@ -51,13 +51,7 @@
   (fresh? [_] false))
 
 (defprotocol SignalProtocol
-  (signal-deps [s] "returns the set of \"parent\" signal which this signal depends on")
-  (message-emitter [s]
-    "returns a map with two entries:
-     * `:sources` is a vector of signals from which to get messages
-     * `:msg-fn` is a function which takes two arguments:
-       - the previous message emitted by this signal
-       - a sequence of new messages emitted by the corresponding signals listed in `:sources`"))
+  (signal-deps [s] "returns the set of \"parent\" signal which this signal depends on"))
 
 (defn signal?
   "returns `true` if the argument satisfies `SignalProtocol`, `false` otherwise"
@@ -65,13 +59,16 @@
   (satisfies? SignalProtocol x))
 
 (defrecord Signal
-  [init message-emitter deps event-sources]
+  [init sources relayed-event-topic msg-fn deps event-sources]
   SignalProtocol
   (signal-deps [_]
     (into #{}
           (filter signal?)
-          (or deps (:sources message-emitter))))
-  (message-emitter [_] message-emitter))
+          (or deps sources))))
+
+(defn build-signal
+  [& opt-maps]
+  (map->Signal (apply merge opt-maps)))
 
 (def ^{:doc "A transducer which takes in batches of signal graph messages and pipes out fresh values."}
   fresh-values
@@ -207,12 +204,11 @@
             (recur (last out-val))))))))
 
 (defn- build-message-mult
-  [mult-map signal]
-  (if-let [{:keys [sources msg-fn]} (message-emitter signal)]
-    (let [c-in (tap-signals mult-map sources)
-          c-out (async/chan)]
-      (spawn-message-loop! (:init signal) msg-fn c-in c-out)
-      (async/mult c-out))))
+  [mult-map {:keys [init sources msg-fn]}]
+  (let [c-in (tap-signals mult-map sources)
+        c-out (async/chan)]
+    (spawn-message-loop! init msg-fn c-in c-out)
+    (async/mult c-out)))
 
 (defn build-message-mult-map
   [sorted-signals events-mult]

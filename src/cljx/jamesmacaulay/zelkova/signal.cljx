@@ -64,21 +64,21 @@
     * a mult of some such value channel"
   ([init] (input init (keyword (gensym))))
   ([init topic]
-   (impl/map->Signal {:init init
-                      :message-emitter (event-relay topic)}))
+   (impl/build-signal (event-relay topic)
+                      {:init init}))
   ([init topic value-source]
    (let [event-channel-fn (value-source->events-fn value-source topic)]
-     (impl/map->Signal {:init init
-                        :message-emitter (event-relay topic)
-                        :event-sources {topic event-channel-fn}}))))
+     (impl/build-signal (event-relay topic)
+                        {:init init
+                         :event-sources {topic event-channel-fn}}))))
 
 (defn constant
   "Returns a constant signal of the given value."
   [x]
   (let [cached (impl/->Cached x)]
-    (impl/map->Signal {:init x
-                       :message-emitter {:sources [:events]
-                                         :msg-fn (constantly cached)}})))
+    (impl/build-signal {:init x
+                        :sources [:events]
+                        :msg-fn (constantly cached)})))
 
 (defn pipeline
   "Takes a stateless transducer `xform`, a fallback value `base`, and a signal
@@ -98,9 +98,9 @@
         init-val (if (nil? pipelined-init-msg)
                    base
                    (impl/value pipelined-init-msg))]
-    (impl/map->Signal {:init init-val
-                       :message-emitter {:sources [sig]
-                                         :msg-fn msg-fn}})))
+    (impl/build-signal {:init init-val
+                        :sources [sig]
+                        :msg-fn msg-fn})))
 
 (defn mapseq
   "Takes a mapping function `f` and a sequence of signal `sources`, and returns a
@@ -112,12 +112,12 @@
           emit-message (fn [prev messages]
                          (when (some impl/fresh? messages)
                            (impl/->Fresh (apply f (mapv impl/value messages)))))]
-      (impl/map->Signal {:init (->> sources
+      (impl/build-signal {:init (->> sources
                                     (mapv (comp impl/->Fresh :init))
                                     (emit-message nil)
                                     impl/value)
-                         :message-emitter {:sources sources
-                                           :msg-fn emit-message}}))))
+                          :sources sources
+                          :msg-fn emit-message}))))
 
 (defn map
   "Takes a mapping function `f` and any number of signal `sources`, and returns a
@@ -142,22 +142,22 @@
   \"accumulator\"). `init` provides the initial value of the new signal, and
   therefore acts as the seed accumulator."
   [f init source]
-  (impl/map->Signal {:init init
-                     :message-emitter {:sources [source]
-                                       :msg-fn (fn [acc [message]]
-                                                 (when (impl/fresh? message)
-                                                   (impl/->Fresh (f (impl/value message)
-                                                                    (impl/value acc)))))}}))
+  (impl/build-signal {:init init
+                      :sources [source]
+                      :msg-fn (fn [acc [message]]
+                                (when (impl/fresh? message)
+                                  (impl/->Fresh (f (impl/value message)
+                                                   (impl/value acc)))))}))
 
 (defn drop-repeats
   "Returns a signal which relays values of `sig`, but drops repeated equal values."
   [sig]
-  (impl/map->Signal {:init (:init sig)
-                     :message-emitter {:sources [sig]
-                                       :msg-fn (fn [prev [msg]]
-                                                 (when (and (impl/fresh? msg)
-                                                            (not= (impl/value msg) (impl/value prev)))
-                                                   msg))}}))
+  (impl/build-signal {:init (:init sig)
+                      :sources [sig]
+                      :msg-fn (fn [prev [msg]]
+                                (when (and (impl/fresh? msg)
+                                           (not= (impl/value msg) (impl/value prev)))
+                                  msg))}))
 
 (defn reducep
   "Create a past-dependent signal like `foldp`, with a few differences:
@@ -193,10 +193,10 @@
         events-channel-fn (fn [live-graph _]
                             (async/tap (get (:mult-map live-graph) source)
                                        (async/chan 1 msgs->events)))]
-    (impl/map->Signal {:init (:init source)
-                       :deps [source]
-                       :event-sources {topic events-channel-fn}
-                       :message-emitter (event-relay topic)})))
+    (impl/build-signal (event-relay topic)
+                       {:init (:init source)
+                        :deps [source]
+                        :event-sources {topic events-channel-fn}})))
 
 (defn mergeseq
   "Takes a sequence of signals `sigs`, and returns a new signal which relays fresh
@@ -205,10 +205,10 @@
   the other values will be discarded. The initial value of the returned signal is
   equal to the initial value of the first source signal."
   [sigs]
-  (impl/map->Signal {:init (:init (first sigs))
-                     :message-emitter {:sources sigs
-                                       :msg-fn (fn [prev messages]
-                                                 (first (filter impl/fresh? messages)))}}))
+  (impl/build-signal {:init (:init (first sigs))
+                      :sources sigs
+                      :msg-fn (fn [prev messages]
+                                (first (filter impl/fresh? messages)))}))
 
 (defn merge
   "Takes any number of source signals `sigs`, and returns a new signal which relays
@@ -230,11 +230,11 @@
   fresh value. For example, `(sample-on mouse/clicks mouse/position)` returns a signal
   of click positions."
   [sampler-sig value-sig]
-  (impl/map->Signal {:init (:init value-sig)
-                     :message-emitter {:sources [sampler-sig value-sig]
-                                       :msg-fn (fn [prev [sampler-msg value-msg]]
-                                                 (when (impl/fresh? sampler-msg)
-                                                   (impl/->Fresh (impl/value value-msg))))}}))
+  (impl/build-signal {:init (:init value-sig)
+                      :sources [sampler-sig value-sig]
+                      :msg-fn (fn [prev [sampler-msg value-msg]]
+                                (when (impl/fresh? sampler-msg)
+                                  (impl/->Fresh (impl/value value-msg))))}))
 
 (defn count
   "Returns a signal whose values are the number of fresh values emitted so far from
@@ -259,14 +259,14 @@
   value of `sig` does not match the predicate, in which case `base` is used as the initial
   value of the new signal."
   [pred base sig]
-  (impl/map->Signal {:init (if (pred (:init sig))
+  (impl/build-signal {:init (if (pred (:init sig))
                              (:init sig)
                              base)
-                     :message-emitter {:sources [sig]
-                                       :msg-fn (fn [prev [msg]]
-                                                 (when (and (impl/fresh? msg)
-                                                            (pred (impl/value msg)))
-                                                   (impl/->Fresh (impl/value msg))))}}))
+                      :sources [sig]
+                      :msg-fn (fn [prev [msg]]
+                                (when (and (impl/fresh? msg)
+                                           (pred (impl/value msg)))
+                                  (impl/->Fresh (impl/value msg))))}))
 
 (defn drop-if
   "Like `keep-if`, but drops values which match the predicate."
