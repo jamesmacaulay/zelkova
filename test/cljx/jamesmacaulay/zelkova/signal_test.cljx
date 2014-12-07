@@ -2,8 +2,9 @@
 (ns jamesmacaulay.zelkova.signal-test
   (:require [jamesmacaulay.async-tools.core :as tools]
             [jamesmacaulay.zelkova.signal :as z]
+            [jamesmacaulay.zelkova.impl.signal :as impl]
             [clojure.core.async :as async :refer [go go-loop chan to-chan <! >!]]
-            [clojure.core.async.impl.protocols :as impl]
+            [clojure.core.async.impl.protocols :as async-impl]
             [jamesmacaulay.async-tools.test :refer (deftest-async)]
             [clojure.test :refer (deftest is are testing)])
   (:import [java.util.Date]))
@@ -12,22 +13,23 @@
 (ns jamesmacaulay.zelkova.signal-test
   (:require [jamesmacaulay.async-tools.core :as tools]
             [jamesmacaulay.zelkova.signal :as z]
+            [jamesmacaulay.zelkova.impl.signal :as impl]
             [cljs.core.async :as async :refer [chan to-chan <! >!]]
-            [cljs.core.async.impl.protocols :as impl]
+            [cljs.core.async.impl.protocols :as async-impl]
             [jamesmacaulay.async-tools.test :refer-macros (deftest-async)]
             [cemerick.cljs.test :refer-macros (deftest is are testing)])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (defn event-constructor
   [topic]
-  (partial z/->Event topic))
+  (partial impl/->Event topic))
 
 (deftest test-signal-sources
   (let [input (z/input 0)
         foldp (z/foldp + 0 input)
         mapped (z/map vector input foldp)
         async (z/async mapped)]
-    (are [sig sources] (= (z/signal-deps sig) sources)
+    (are [sig sources] (= (impl/signal-deps sig) sources)
          input #{}
          foldp #{input}
          mapped #{input foldp}
@@ -38,7 +40,7 @@
         foldp (z/foldp + 0 input)
         mapped (z/map vector input foldp)
         async (z/async mapped)]
-    (are [out deps] (= (z/output-node->dependency-map out) deps)
+    (are [out deps] (= (impl/output-node->dependency-map out) deps)
          input {input #{}}
          foldp {input #{}
                 foldp #{input}}
@@ -55,7 +57,7 @@
         foldp (z/foldp + 0 input)
         mapped (z/map vector input foldp)
         async (z/async mapped)]
-    (are [out sorted-sigs] (= (z/topsort out) sorted-sigs)
+    (are [out sorted-sigs] (= (impl/topsort out) sorted-sigs)
          input [input]
          foldp [input foldp]
          mapped [input foldp mapped]
@@ -70,7 +72,7 @@
           pairs (z/map vector numbers-input letters-input)
           live-graph (z/spawn pairs)
           output (async/tap live-graph
-                            (chan 1 z/fresh-values))]
+                            (chan 1 impl/fresh-values))]
       (async/onto-chan live-graph
                        [(number 1)
                         (letter :b)
@@ -84,7 +86,7 @@
     (let [number (event-constructor :numbers)
           in (z/input 0 :numbers)
           graph (z/spawn in)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= 0 (:init in)))
       (async/onto-chan graph (map number [1 2 3]))
       (is (= [1 2 3]
@@ -96,7 +98,7 @@
           in (z/input 0 :numbers)
           incremented (z/map inc in)
           graph (z/spawn incremented)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= 1 (:init incremented)))
       (async/onto-chan graph (map number [1 2 3]))
       (is (= [2 3 4]
@@ -105,7 +107,7 @@
           ins (map (partial z/input 0) [:a :b :c])
           summed (apply z/map + ins)
           graph (z/spawn summed)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= 0 (:init summed)))
       (async/onto-chan graph [(a 1) (b 2) (c 3) (a 10)])
       (is (= [1 3 6 15]
@@ -121,7 +123,7 @@
           in (z/input 0 :numbers)
           sum (z/foldp + 0 in)
           graph (z/spawn sum)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= 0 (:init sum)))
       (async/onto-chan graph (map number [1 2 3]))
       (is (= [1 3 6]
@@ -138,7 +140,7 @@
                                  decremented
                                  incremented)
           graph (z/spawn combined)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (async/onto-chan graph (map number [2 10]))
       (is (= [{:decremented 1
                :incremented 3}
@@ -153,7 +155,7 @@
           foo (z/constant :foo)
           combined (z/map vector in foo)
           graph (z/spawn combined)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= [0 :foo] (:init combined)))
       (async/onto-chan graph (map number [1 2 3]))
       (is (= [[1 :foo] [2 :foo] [3 :foo]]
@@ -169,7 +171,7 @@
           b-inc (z/map inc b-in)
           merged (z/merge a-in b-dec b-in b-inc)
           graph (z/spawn merged)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= 10 (:init merged)))
       (async/onto-chan graph [(a 20) (b 30) (a 40) (b 50)])
       (is (= [20 29 40 49]
@@ -182,7 +184,7 @@
           inc'd (z/map inc in)
           combined (z/combine [in inc'd])
           graph (z/spawn combined)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= [0 1] (:init combined)))
       (async/onto-chan graph (map number [1 2]))
       (is (= [[1 2] [2 3]]
@@ -199,7 +201,7 @@
           fake-mouse-clicks (z/input :click :mouse-clicks)
           sampled (z/sample-on fake-mouse-clicks fake-mouse-position)
           graph (z/spawn sampled)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= [0 0] (:init sampled)))
       (async/onto-chan graph
                        [(pos [10 10])
@@ -222,7 +224,7 @@
                                              conj
                                              in)
           graph (z/spawn odd-increments)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= [] (:init odd-increments)))
       (async/onto-chan graph (map number [20 21 22 23]))
       (is (= [[21]
@@ -238,7 +240,7 @@
           count1 (z/count in1)
           combined (z/map vector count1 in1 in2)
           graph (z/spawn combined)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= 0 (:init count1)))
       (is (= [0 1 1] (:init combined)))
       (async/onto-chan graph [(in1-event 2)
@@ -260,7 +262,7 @@
           count1-odd (z/count-if odd? in1)
           combined (z/map vector count1-odd in1 in2)
           graph (z/spawn combined)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= 0 (:init count1-odd)))
       (async/onto-chan graph [(in1-event 2)
                               (in1-event 3)
@@ -284,7 +286,7 @@
           count-even (z/count evennums)
           combined (z/map vector oddnums count-odd evennums count-even)
           graph (z/spawn combined)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= [-1 0 0 0] (:init combined)))
       (async/onto-chan graph (map number [1 2 3]))
       (is (= [[1 1 0 0]
@@ -300,7 +302,7 @@
           letters-in (z/input :a :letters)
           odd-kept-letters (z/keep-when (z/map odd? numbers-in) :false-init letters-in)
           graph (z/spawn odd-kept-letters)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= :false-init (:init odd-kept-letters)))
       (is (= :a (:init (z/keep-when (z/map even? numbers-in) :z letters-in))))
       (async/onto-chan graph [(letter :b)
@@ -319,7 +321,7 @@
           in (z/input 0 :numbers)
           no-repeats (z/drop-repeats in)
           graph (z/spawn no-repeats)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= 0 (:init no-repeats)))
       (async/onto-chan graph (map number [1 1 2 1 2 2 2 1 1]))
       (is (= [1 2 1 2 1] (<! (async/into [] out)))))))
@@ -331,7 +333,7 @@
                                        [30 30]])
           mouse-position (z/input [0 0] :mouse-position (constantly value-source))
           graph (z/spawn mouse-position)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= [[10 10] [20 20] [30 30]]
              (<! (async/into [] out)))))))
 
@@ -340,7 +342,7 @@
     (let [value-source (async/chan)
           numbers (z/input 0 :numbers (async/mult value-source))
           graph (z/spawn numbers)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (async/onto-chan value-source [1 2 3])
       (is (= [1 2 3]
              (<! (async/into [] out)))))))
@@ -350,7 +352,7 @@
     (let [value-source (async/chan)
           numbers (z/input 0 :numbers value-source)
           graph (z/spawn numbers)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (async/onto-chan value-source [1 2 3])
       (is (= [1 2 3]
              (<! (async/into [] out)))))))
@@ -364,7 +366,7 @@
           async-incremented (z/async incremented)
           combined (z/combine [decremented async-incremented])
           graph (z/spawn combined)
-          out (async/tap graph (chan 1 z/fresh-values))]
+          out (async/tap graph (chan 1 impl/fresh-values))]
       (is (= [-1 1] (:init combined)))
       (>! graph (number 1))
       (is (= [0 1] (<! out)))
@@ -391,8 +393,8 @@
                                        (filter odd?))
                                  99)
                      (z/spawn))
-          out (async/tap graph (chan 1 z/fresh-values))]
-      (is (= 1 (z/init graph)))
+          out (async/tap graph (chan 1 impl/fresh-values))]
+      (is (= 1 (impl/init graph)))
       (async/onto-chan ch [[1 2 3]
                            [4 5 6 7]
                            [8 9]
@@ -403,12 +405,12 @@
 (deftest test-pipeline-uses-last-message-in-batch-for-init
   (is (= 4 (->> (z/input [1 2 3 4] :number-vectors)
                 (z/pipeline cat 0)
-                (z/init)))))
+                (impl/init)))))
 
 (deftest test-pipeline-falls-back-to-base-value-for-init
   (is (= 99 (->> (z/input 0 :numbers)
                  (z/pipeline (filter odd?) 99)
-                 (z/init)))))
+                 (impl/init)))))
 
 (deftest-async test-pipeline-resets-transducer-state-on-every-item-making-stateful-transducers-pretty-much-useless
   (go
@@ -417,8 +419,8 @@
                      (z/input 0 :numbers)
                      (z/pipeline (drop 1) 99)
                      (z/spawn))
-          out (async/tap graph (chan 1 z/fresh-values))]
-      (is (= 99 (z/init graph)))
+          out (async/tap graph (chan 1 impl/fresh-values))]
+      (is (= 99 (impl/init graph)))
       (async/onto-chan ch [1 2 3 4])
       (is (= []
              (<! (async/into [] out)))))
@@ -427,8 +429,8 @@
                      (z/input 0 :numbers)
                      (z/pipeline (take 1) 99)
                      (z/spawn))
-          out (async/tap graph (chan 1 z/fresh-values))]
-      (is (= 0 (z/init graph)))
+          out (async/tap graph (chan 1 impl/fresh-values))]
+      (is (= 0 (impl/init graph)))
       (async/onto-chan ch [1 2 3 4])
       (is (= [1 2 3 4]
              (<! (async/into [] out)))))))
