@@ -1,6 +1,6 @@
 (ns jamesmacaulay.async-tools.test
   (:require [jamesmacaulay.async-tools.core :as tools]
-            [cemerick.cljs.test]
+            #+cljs [cemerick.cljs.test]
             #+clj [clojure.test]))
 
 #+clj
