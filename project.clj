@@ -3,11 +3,11 @@
   :url "http://github.com/jamesmacaulay/zelkova"
   :license {:name "MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[org.clojure/clojure "1.7.0-alpha2"]
+  :dependencies [[org.clojure/clojure "1.7.0-alpha4"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
   :plugins [[lein-cljsbuild "1.0.3"]
             [com.keminglabs/cljx "0.4.0" :exclusions [org.clojure/clojure]]
-            [com.cemerick/clojurescript.test "0.3.1"]
+            [com.cemerick/clojurescript.test "0.3.3"]
             [com.cemerick/austin "0.1.5"]]
   :jar-exclusions [#"\.cljx"]
   :aliases {"repl" ["with-profile" "repl" "repl"]
@@ -15,10 +15,10 @@
             "cljs-test" ["do" "cljx" ["cljsbuild" "test"]]
             "cljs-autotest" ["do" "cljx" ["cljsbuild" "auto" "test"]]
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
-  :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.5"]
-                                  [org.clojure/tools.nrepl "0.2.4"]
-                                  [org.clojure/clojurescript "0.0-2356"]
-                                  [com.cemerick/clojurescript.test "0.3.1"]
+  :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.7"]
+                                  [org.clojure/tools.nrepl "0.2.6"]
+                                  [org.clojure/clojurescript "0.0-2411"]
+                                  [com.cemerick/clojurescript.test "0.3.3"]
                                   [com.cemerick/austin "0.1.5"]]
                    :source-paths ["target/classes"]}
              :repl [:dev {:source-paths ["repl" "target/classes" "target/generated/test/clj" "target/generated/test/cljs"]
