@@ -176,7 +176,7 @@
   computing new values. This function is mainly useful in multithreaded environments when
   you don't want a slow computation to block the whole graph."
   [source]
-  (let [topic source
+  (let [topic [::async source]
         msgs->events (comp cat
                            (filter impl/fresh?)
                            (core/map (fn [msg]
@@ -185,6 +185,29 @@
                             (async/tap (get (:mult-map live-graph) source)
                                        (async/chan 1 msgs->events)))]
     (impl/make-signal {:init (:init source)
+                       :deps [source]
+                       :relayed-event-topic topic
+                       :event-sources {topic events-channel-fn}})))
+
+(defn splice
+  "Splice into the signal graph on the level of core.async channels. Takes a
+  `setup!` function which is called when the `source` signal gets wired up into
+  a live graph. The `setup!` function is passed two arguments: a `to` channel
+  and a `from` channel, in that order. The function is expected to be a consumer
+  of the `from` channel and a producer on the `to` channel, and should close the
+  `to` channel when the `from` channel is closed. There are no requirements for
+  how many values should be put on the `to` channel or when they should be sent.
+  `splice` returns signal with an initial value of `init`, which asynchronously
+  produces whichever values are put on the `to` channel in the `setup!` function."
+  [setup! init source]
+  (let [topic [::splice init setup! source]
+        events-channel-fn (fn [live-graph _]
+                            (let [from (async/tap (get (:mult-map live-graph) source)
+                                                  (async/chan 1 impl/fresh-values))
+                                  to (async/chan 1 (core/map (partial impl/make-event topic)))]
+                              (setup! to from)
+                              to))]
+    (impl/make-signal {:init init
                        :deps [source]
                        :relayed-event-topic topic
                        :event-sources {topic events-channel-fn}})))

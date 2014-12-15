@@ -447,3 +447,25 @@
                (-> msg
                    (impl/origin-event)
                    (impl/record-timestamp nil))))))))
+
+(deftest-async test-splice
+  (go
+    (let [ch (async/chan)
+          graph (->> ch
+                     (z/input 0 :numbers)
+                     (z/splice (fn [to from]
+                                 (async/pipeline-async 1
+                                                       to
+                                                       (fn [v ch]
+                                                         (go (>! ch v) (async/close! ch)))
+                                                       from))
+                               -1)
+                     (z/spawn))
+          out (async/tap graph (chan 1 impl/fresh-values))]
+      (is (= -1 (impl/init graph)))
+      (>! ch 1)
+      (is (= 1 (<! out)))
+      (>! ch 2)
+      (is (= 2 (<! out)))
+      (async/close! ch)
+      (is (= nil (<! out))))))
