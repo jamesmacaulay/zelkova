@@ -1,15 +1,17 @@
 #+clj
 (ns jamesmacaulay.zelkova.time
-  (:refer-clojure :exclude [second])
+  (:refer-clojure :exclude [second delay])
   (:require [jamesmacaulay.zelkova.platform.time :as t]
             [jamesmacaulay.zelkova.signal :as z]
+            [jamesmacaulay.zelkova.impl.signal :as impl]
             [clojure.core.async :as async :refer [>! <! go go-loop]]))
 
 #+cljs
 (ns jamesmacaulay.zelkova.time
-  (:refer-clojure :exclude [second])
+  (:refer-clojure :exclude [second delay])
   (:require [jamesmacaulay.zelkova.platform.time :as t]
             [jamesmacaulay.zelkova.signal :as z]
+            [jamesmacaulay.zelkova.impl.signal :as impl]
             [cljs.core.async :as async :refer [>! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
@@ -56,3 +58,29 @@
 (defn every
   [ms]
   (z/input (t/now) [::every ms] (every-channel-fn ms)))
+
+(defn timestamp
+  [sig]
+  (impl/make-signal {:init [0 (impl/init sig)]
+                     :sources [sig]
+                     :msg-fn (fn [_ [msg]]
+                               (when (impl/fresh? msg)
+                                 (impl/fresh [(t/now) (impl/value msg)])))}))
+
+#+cljs
+(defn delay
+  [ms sig]
+  (z/splice (fn [to from]
+              (let [waiting (async/chan 1000)
+                    fire! #(async/take! waiting (partial async/put! to))]
+                (go-loop []
+                  (let [v (<! from)]
+                    (if (nil? v)
+                      (async/close! to)
+                      (do
+                        (>! waiting v)
+                        (js/setTimeout fire! ms)
+                        (recur)))))))
+            (impl/init sig)
+            sig))
+
