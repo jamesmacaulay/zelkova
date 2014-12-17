@@ -88,3 +88,16 @@
             (impl/init sig)
             sig))
 
+#+cljs
+(defn since
+  [ms sig]
+  (let [start (z/map (constantly 1) sig)
+        stop (z/map (constantly -1) (delay ms sig))
+        delaydiff (z/foldp + 0 (z/merge start stop))]
+    (z/map (complement zero?) delaydiff)))
+
+#+cljs
+(defn debounce
+  [ms sig]
+  (let [timeouts (->> sig (since ms) (z/keep-if not false))]
+    (->> sig (z/sample-on timeouts))))
