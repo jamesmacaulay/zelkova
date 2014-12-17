@@ -75,7 +75,7 @@
 (defn delay
   [ms sig]
   (z/splice (fn [to from]
-              (let [waiting (async/chan 1000)
+              (let [waiting (async/chan (+ 1000 ms))
                     fire! #(async/take! waiting (partial async/put! to))]
                 (go-loop []
                   (let [v (<! from)]
