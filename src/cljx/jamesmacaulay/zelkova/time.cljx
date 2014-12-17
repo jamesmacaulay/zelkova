@@ -59,13 +59,17 @@
   [ms]
   (z/input (t/now) [::every ms] (every-channel-fn ms)))
 
+(def ^:private timestamp-vector
+  (juxt (comp impl/timestamp impl/origin-event)
+        impl/value))
+
 (defn timestamp
   [sig]
   (impl/make-signal {:init [0 (impl/init sig)]
                      :sources [sig]
                      :msg-fn (fn [_ [msg]]
                                (when (impl/fresh? msg)
-                                 (impl/fresh [(t/now) (impl/value msg)])))}))
+                                 (impl/fresh (timestamp-vector msg))))}))
 
 #+cljs
 (defn delay
