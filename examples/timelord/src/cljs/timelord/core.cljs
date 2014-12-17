@@ -1,30 +1,20 @@
 (ns timelord.core
     (:require [reagent.core :as reagent :refer [atom]]
               [jamesmacaulay.zelkova.signal :as z]
+              [jamesmacaulay.zelkova.impl.signal :as zimpl]
               [jamesmacaulay.zelkova.mouse :as mouse]
-              [jamesmacaulay.zelkova.keyboard :as keyboard]
               [jamesmacaulay.zelkova.time :as time]))
 
 (enable-console-print!)
 
+(def app-signal (z/template {:timestamped (time/timestamp mouse/position)
+                             :delayed (time/delay 1000 mouse/position)
+                             :debounced (time/debounce 500 mouse/position)}))
 
-(def ticker mouse/position)
-
-(def counter (z/count ticker))
-
-(def timestamped (time/timestamp counter))
-
-(def delayed (->> counter (time/delay 10000) (time/timestamp)))
-
-(def app-signal (z/template {:counter counter
-                             :timestamped timestamped
-                             :delayed delayed}))
 
 ;; -------------------------
 ;; State
-(defonce app-state (atom {:counter 0
-                          :timestamped [0 0]
-                          :delayed 0}))
+(defonce app-state (atom (zimpl/init app-signal)))
 
 (z/pipe-to-atom app-signal app-state)
 
