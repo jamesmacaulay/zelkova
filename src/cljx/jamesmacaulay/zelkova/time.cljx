@@ -20,12 +20,12 @@
 (def minute (* 60 second))
 (def hour (* 60 minute))
 
-(defn in-milliseconds [n] (/ n millisecond))
-(defn in-seconds [n] (/ n second))
-(defn in-minutes [n] (/ n minute))
-(defn in-hours [n] (/ n hour))
+(defn in-milliseconds [ms] ms)
+(defn in-seconds [ms] (/ ms second))
+(defn in-minutes [ms] (/ ms minute))
+(defn in-hours [ms] (/ ms hour))
 
-(defn fps-channel-fn
+(defn- fps-channel-fn
   [n]
   (fn [graph opts]
     (let [ms-per-frame (/ 1000 n)
@@ -40,10 +40,13 @@
       out)))
 
 (defn fps
+  "Takes desired number of frames per second (fps). The resulting signal gives
+  a sequence of time deltas as quickly as possible until it reaches the desired
+  FPS. A time delta is the time between the last frame and the current frame."
   [n]
   (z/input 0 [::fps n] (fps-channel-fn n)))
 
-(defn every-channel-fn
+(defn- every-channel-fn
   [ms]
   (fn [graph opts]
     (let [out (async/chan)]
@@ -56,6 +59,8 @@
       out)))
 
 (defn every
+  "Takes a time interval `ms`. The resulting signal is the current time, updated
+  every `ms` milliseconds."
   [ms]
   (z/input (t/now) [::every ms] (every-channel-fn ms)))
 
@@ -64,6 +69,10 @@
         impl/value))
 
 (defn timestamp
+  "Add a timestamp to any signal. Returns a signal of `[timestamp value]`
+  vectors. Timestamps are tied to the origin events of a signal value, so
+  `(timestamp mouse/x)` and `(timestamp mouse/y)` will always have the same
+  timestamp because they rely on the same underlying event (`mouse/position`)."
   [sig]
   (impl/make-signal {:init [0 (impl/init sig)]
                      :sources [sig]
@@ -73,6 +82,7 @@
 
 #+cljs
 (defn delay
+  "Delay a signal by `ms` milliseconds."
   [ms sig]
   (z/splice (fn [to from]
               (let [waiting (async/chan (+ 1000 ms))
@@ -90,6 +100,8 @@
 
 #+cljs
 (defn since
+  "Returns a signal of boolean values: true when `sig` has updated in the past
+  `ms` milliseconds, false otherwise."
   [ms sig]
   (let [start (z/map (constantly 1) sig)
         stop (z/map (constantly -1) (delay ms sig))
@@ -98,6 +110,10 @@
 
 #+cljs
 (defn debounce
+  "Returns a signal which relays the latest value from `sig` only after `ms`
+  milliseconds have passed since `sig` last updated. Useful when you want to
+  wait until a user stops typing before doing something with the text, for
+  example."
   [ms sig]
   (let [timeouts (->> sig (since ms) (z/keep-if not false))]
     (->> sig (z/sample-on timeouts))))
