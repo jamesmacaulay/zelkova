@@ -287,12 +287,14 @@
 
 (defprotocol LiveChannelGraphProtocol
   (output-mult [g])
+  (signal-mult [g sig])
   (connect-to-world [g opts]))
 
 (defrecord LiveChannelGraph
   [compiled-graph events-channel mult-map]
   LiveChannelGraphProtocol
   (output-mult [_] (get mult-map (:output-signal compiled-graph)))
+  (signal-mult [_ sig] (get mult-map sig))
   (connect-to-world [g opts]
     (let [world (gather-event-sources (:sorted-signals compiled-graph))]
       (doseq [channel-fn (vals world)]

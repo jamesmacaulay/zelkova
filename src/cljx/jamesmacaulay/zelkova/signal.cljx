@@ -182,7 +182,7 @@
                            (core/map (fn [msg]
                                        (impl/make-event topic (impl/value msg)))))
         events-channel-fn (fn [live-graph _]
-                            (async/tap (get (:mult-map live-graph) source)
+                            (async/tap (impl/signal-mult live-graph source)
                                        (async/chan 1 msgs->events)))]
     (impl/make-signal {:init (:init source)
                        :deps [source]
@@ -202,7 +202,7 @@
   [setup! init source]
   (let [topic [::splice init setup! source]
         events-channel-fn (fn [live-graph _]
-                            (let [from (async/tap (get (:mult-map live-graph) source)
+                            (let [from (async/tap (impl/signal-mult live-graph source)
                                                   (async/chan 1 impl/fresh-values))
                                   to (async/chan 1 (core/map (partial impl/make-event topic)))]
                               (setup! to from)
