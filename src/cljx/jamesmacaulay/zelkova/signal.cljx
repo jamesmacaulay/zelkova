@@ -197,7 +197,7 @@
   of the `from` channel and a producer on the `to` channel, and should close the
   `to` channel when the `from` channel is closed. There are no requirements for
   how many values should be put on the `to` channel or when they should be sent.
-  `splice` returns signal with an initial value of `init`, which asynchronously
+  `splice` returns a signal with an initial value of `init`, which asynchronously
   produces whichever values are put on the `to` channel in the `setup!` function."
   [setup! init source]
   (let [topic [::splice init setup! source]
