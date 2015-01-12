@@ -40,17 +40,27 @@
         foldp (z/foldp + 0 input)
         mapped (z/map vector input foldp)
         async (z/async mapped)]
-    (are [out deps] (= (impl/output-node->dependency-map out) deps)
-         input {input #{}}
-         foldp {input #{}
-                foldp #{input}}
-         mapped {input #{}
-                 foldp #{input}
-                 mapped #{input foldp}}
-         async {input #{}
-                foldp #{input}
-                mapped #{input foldp}
-                async #{mapped}})))
+    (are [out deps] (= (impl/signal->dependency-maps out) deps)
+         input {:parents-map {input #{}}
+                :kids-map {input #{}}}
+         foldp {:parents-map {input #{}
+                              foldp #{input}}
+                :kids-map {input #{foldp}
+                           foldp #{}}}
+         mapped {:parents-map {input #{}
+                               foldp #{input}
+                               mapped #{input foldp}}
+                 :kids-map {input #{foldp mapped}
+                            foldp #{mapped}
+                            mapped #{}}}
+         async {:parents-map {input #{}
+                              foldp #{input}
+                              mapped #{input foldp}
+                              async #{mapped}}
+                :kids-map {input #{foldp mapped}
+                           foldp #{mapped}
+                           mapped #{async}
+                           async #{}}})))
 
 (deftest test-topsort
   (let [input (z/input 0)

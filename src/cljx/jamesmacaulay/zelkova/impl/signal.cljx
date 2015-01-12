@@ -3,6 +3,7 @@
   (:require [jamesmacaulay.async-tools.core :as tools]
             [jamesmacaulay.zelkova.platform.time :as time]
             [clojure.zip :as zip]
+            [clojure.set]
             [alandipert.kahn :as kahn]
             [clojure.core.async :as async :refer [go go-loop <! >!]]
             [clojure.core.async.impl.protocols :as async-impl]))
@@ -12,6 +13,7 @@
   (:require [jamesmacaulay.async-tools.core :as tools]
             [jamesmacaulay.zelkova.platform.time :as time]
             [clojure.zip :as zip]
+            [clojure.set]
             [alandipert.kahn :as kahn]
             [cljs.core.async :as async :refer [<! >!]]
             [cljs.core.async.impl.protocols :as async-impl])
@@ -140,23 +142,37 @@
               (recur (zip/up p)))
           [(zip/node p) :end]))))
 
+(defn signal->dependency-maps
+  "Takes a signal and returns a map of two maps:
+    :parents-map is a map of signals to their parents,
+    :kids-map is a map of signals to their children."
+  [signal]
+  (loop [parents-map {}
+         kids-map {signal #{}}
+         loc (node-graph-zipper signal)]
+    (cond
+      (zip/end? loc)
+      {:parents-map parents-map
+       :kids-map kids-map}
+
+      (contains? parents-map (zip/node loc))
+      (recur parents-map kids-map (skip-subtree loc))
+
+      :else
+      (let [this-sig (zip/node loc)
+            parents (signal-deps this-sig)
+            next-sig (zip/next loc)]
+        (recur
+          (assoc parents-map this-sig parents)
+          (merge-with clojure.set/union
+                      kids-map
+                      (zipmap parents (repeat #{this-sig})))
+          next-sig)))))
+
 (defn output-node->dependency-map
   "Takes a signal and returns a map of signals to sets of signal dependencies."
   [output-node]
-  (loop [deps {}
-         loc (node-graph-zipper output-node)]
-    (cond
-      (zip/end? loc)
-      deps
-      (contains? deps (zip/node loc))
-      (recur deps
-             (skip-subtree loc))
-      :else
-      (let [n (zip/node loc)]
-        (recur (if (sequential? n)
-                 deps
-                 (assoc deps n (signal-deps n)))
-               (zip/next loc))))))
+  (-> output-node signal->dependency-maps :parents-map))
 
 (defn topsort
   "Takes a signal and returns a topologically sorted sequence of all signals in its graph."
