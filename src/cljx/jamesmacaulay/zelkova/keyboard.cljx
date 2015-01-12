@@ -110,5 +110,6 @@
 
 (def enter (down? 13))
 
+#+cljs
 (def last-pressed
   (z/map #(.-keyCode %) down-events))
