@@ -479,4 +479,13 @@
       (>! ch 2)
       (is (= 2 (<! out)))
       (async/close! ch)
-      (is (= nil (<! out))))))
+      (is (= nil (<! out))))
+    (let [graph (->> (z/input :a)
+                     (z/splice (fn [to from]
+                                 (async/pipeline-async 1
+                                                       to
+                                                       (fn [v ch]
+                                                         (go (>! ch v) (async/close! ch)))
+                                                       from)))
+                     (z/spawn))]
+      (is (= :a (impl/init graph))))))

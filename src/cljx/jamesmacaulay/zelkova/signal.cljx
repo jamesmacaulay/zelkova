@@ -204,21 +204,25 @@
   of the `from` channel and a producer on the `to` channel, and should close the
   `to` channel when the `from` channel is closed. There are no requirements for
   how many values should be put on the `to` channel or when they should be sent.
-  `splice` returns a signal with an initial returned from `init-fn`. The signal
+  `splice` returns a signal with an initial returned from `init-fn`. `init-fn`
+  takes two functions, a `live-graph` and an `opts` map. If no `init-fn` is
+  provided, then the initial value of `source` is used. The returned signal
   asynchronously produces whichever values are put on the `to` channel in the
   `setup!` function."
-  [setup! init-fn source]
-  (let [topic [::splice init-fn setup! source]
-        events-channel-fn (fn [live-graph _]
-                            (let [from (async/tap (impl/signal-mult live-graph source)
-                                                  (async/chan 1 impl/fresh-values))
-                                  to (async/chan 1 (core/map (partial impl/make-event topic)))]
-                              (setup! to from)
-                              to))]
-    (impl/make-signal {:init-fn init-fn
-                       :deps [source]
-                       :relayed-event-topic topic
-                       :event-sources {topic events-channel-fn}})))
+  ([setup! source]
+    (splice setup! (:init-fn source) source))
+  ([setup! init-fn source]
+    (let [topic [::splice init-fn setup! source]
+          events-channel-fn (fn [live-graph _]
+                              (let [from (async/tap (impl/signal-mult live-graph source)
+                                                    (async/chan 1 impl/fresh-values))
+                                    to (async/chan 1 (core/map (partial impl/make-event topic)))]
+                                (setup! to from)
+                                to))]
+      (impl/make-signal {:init-fn init-fn
+                         :deps [source]
+                         :relayed-event-topic topic
+                         :event-sources {topic events-channel-fn}}))))
 
 (defn mergeseq
   "Takes a sequence of signals `sigs`, and returns a new signal which relays fresh
