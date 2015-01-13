@@ -91,7 +91,7 @@
   (satisfies? SignalProtocol x))
 
 (defrecord Signal
-  [init sources relayed-event-topic msg-fn deps event-sources]
+  [init-fn sources relayed-event-topic msg-fn deps event-sources]
   SignalProtocol
   (signal-deps [_]
     (into #{}
@@ -267,17 +267,17 @@
             (recur (last out-val))))))))
 
 (defn- build-message-mult
-  [mult-map {:keys [init sources msg-fn]}]
+  [mult-map {:keys [init-fn sources msg-fn]} live-graph opts]
   (let [c-in (tap-signals mult-map sources)
         c-out (async/chan)]
-    (spawn-message-loop! init msg-fn c-in c-out)
+    (spawn-message-loop! (init-fn live-graph opts) msg-fn c-in c-out)
     (async/mult c-out)))
 
 (defn build-message-mult-map
-  [sorted-signals events-mult]
+  [sorted-signals events-mult live-graph opts]
   (reduce (fn [mult-map signal]
             (assoc mult-map
-              signal (build-message-mult mult-map signal)))
+              signal (build-message-mult mult-map signal live-graph opts)))
           {:events events-mult}
           sorted-signals))
 
@@ -288,19 +288,21 @@
 (defprotocol LiveChannelGraphProtocol
   (output-mult [g])
   (signal-mult [g sig])
-  (connect-to-world [g opts]))
+  (connect-to-world [g])
+  (init [g]))
 
 (defrecord LiveChannelGraph
-  [compiled-graph events-channel mult-map]
+  [compiled-graph events-channel mult-map opts]
   LiveChannelGraphProtocol
   (output-mult [_] (get mult-map (:output-signal compiled-graph)))
   (signal-mult [_ sig] (get mult-map sig))
-  (connect-to-world [g opts]
+  (connect-to-world [g]
     (let [world (gather-event-sources (:sorted-signals compiled-graph))]
       (doseq [channel-fn (vals world)]
         (async/pipe (channel-fn g opts)
                     events-channel)))
     g)
+  (init [g] ((-> compiled-graph :output-signal :init-fn) g opts))
   async-impl/Channel
   (close! [_] (async-impl/close! events-channel))
   (closed? [_] (async-impl/closed? events-channel))
@@ -312,7 +314,6 @@
   (untap-all* [g] (async/untap-all* (output-mult g))))
 
 (defprotocol SignalLike
-  (init [x])
   (spawn* [x opts])
   (pipe-to-atom* [x a ks]))
 
@@ -324,7 +325,6 @@
 
 (extend-protocol SignalLike
   LiveChannelGraph
-  (init [g] (init (:compiled-graph g)))
   (spawn* [g opts] (spawn* (:compiled-graph g) opts))
   (pipe-to-atom* [g atm ks]
     (tools/do-effects (if (seq ks)
@@ -333,18 +333,16 @@
                       (async/tap g (async/chan 1 fresh-values)))
     atm)
   CompiledGraph
-  (init [g] (:init (:output-signal g)))
   (spawn* [g opts]
     (let [events-channel (async/chan 1 events-xform)
           events-mult (async/mult events-channel)
-          mult-map (build-message-mult-map (:sorted-signals g) events-mult)]
+          mult-map (build-message-mult-map (:sorted-signals g) events-mult g opts)]
       (-> g
-          (->LiveChannelGraph events-channel mult-map)
-          (connect-to-world opts))))
+          (->LiveChannelGraph events-channel mult-map opts)
+          (connect-to-world))))
   (pipe-to-atom* [g atm ks]
     (pipe-to-atom* (spawn* g nil) atm ks))
   Signal
-  (init [s] (:init s))
   (spawn* [s opts] (spawn* (compile-graph s) opts))
   (pipe-to-atom* [s atm ks]
     (pipe-to-atom* (spawn* s nil) atm ks)))

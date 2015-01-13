@@ -55,11 +55,11 @@
     * a mult of some such value channel"
   ([init] (input init (keyword (gensym))))
   ([init topic]
-   (impl/make-signal {:init init
+   (impl/make-signal {:init-fn (constantly init)
                       :relayed-event-topic topic}))
   ([init topic value-source]
    (let [event-channel-fn (value-source->events-fn value-source topic)]
-     (impl/make-signal {:init init
+     (impl/make-signal {:init-fn (constantly init)
                         :relayed-event-topic topic
                         :event-sources {topic event-channel-fn}}))))
 
@@ -67,7 +67,7 @@
   "Returns a constant signal of the given value."
   [x]
   (let [cached (impl/cached x)]
-    (impl/make-signal {:init x
+    (impl/make-signal {:init-fn (constantly x)
                        :sources [:events]
                        :msg-fn (constantly cached)})))
 
@@ -85,13 +85,19 @@
         msg-fn (fn [prev [msg :as msg-in-seq]]
                  (when (impl/fresh? msg)
                    (sequence xform' msg-in-seq)))
-        pipelined-init-msg (->> (:init sig) impl/fresh vector (msg-fn nil) last)
-        init-val (if (nil? pipelined-init-msg)
-                   base
-                   (impl/value pipelined-init-msg))]
-    (impl/make-signal {:init init-val
-                        :sources [sig]
-                        :msg-fn msg-fn})))
+        init-fn (:init-fn sig)
+        init-fn' (fn [live-graph opts]
+                   (let [msg (->> (init-fn live-graph opts)
+                                  (impl/fresh)
+                                  (vector)
+                                  (msg-fn nil)
+                                  (last))]
+                     (if (nil? msg)
+                       base
+                       (impl/value msg))))]
+    (impl/make-signal {:init-fn init-fn'
+                       :sources [sig]
+                       :msg-fn msg-fn})))
 
 (defn mapseq
   "Takes a mapping function `f` and a sequence of signal `sources`, and returns a
@@ -100,13 +106,14 @@
   (if (empty? sources)
     (constant (f))
     (let [sources (vec sources)
-          emit-message (fn [prev messages]
+          emit-message (fn [_ messages]
                          (when (some impl/fresh? messages)
                            (impl/fresh (apply f (mapv impl/value messages)))))]
-      (impl/make-signal {:init (->> sources
-                                    (mapv (comp impl/fresh :init))
-                                    (emit-message nil)
-                                    impl/value)
+      (impl/make-signal {:init-fn (fn [live-graph opts]
+                                    (->> sources
+                                         (mapv #(impl/fresh ((:init-fn %) live-graph opts)))
+                                         (emit-message nil)
+                                         impl/value))
                          :sources sources
                          :msg-fn emit-message}))))
 
@@ -132,8 +139,8 @@
   `source` signal, and the previous value of the new `foldp` signal (acting as the
   \"accumulator\"). `init` provides the initial value of the new signal, and
   therefore acts as the seed accumulator."
-  [f init source]
-  (impl/make-signal {:init init
+  [f base source]
+  (impl/make-signal {:init-fn (constantly base)
                      :sources [source]
                      :msg-fn (fn [acc [message]]
                                (when (impl/fresh? message)
@@ -143,7 +150,7 @@
 (defn drop-repeats
   "Returns a signal which relays values of `sig`, but drops repeated equal values."
   [sig]
-  (impl/make-signal {:init (:init sig)
+  (impl/make-signal {:init-fn (:init-fn sig)
                      :sources [sig]
                      :msg-fn (fn [prev [msg]]
                                (when (and (impl/fresh? msg)
@@ -184,7 +191,7 @@
         events-channel-fn (fn [live-graph _]
                             (async/tap (impl/signal-mult live-graph source)
                                        (async/chan 1 msgs->events)))]
-    (impl/make-signal {:init (:init source)
+    (impl/make-signal {:init-fn (:init-fn source)
                        :deps [source]
                        :relayed-event-topic topic
                        :event-sources {topic events-channel-fn}})))
@@ -197,17 +204,18 @@
   of the `from` channel and a producer on the `to` channel, and should close the
   `to` channel when the `from` channel is closed. There are no requirements for
   how many values should be put on the `to` channel or when they should be sent.
-  `splice` returns a signal with an initial value of `init`, which asynchronously
-  produces whichever values are put on the `to` channel in the `setup!` function."
-  [setup! init source]
-  (let [topic [::splice init setup! source]
+  `splice` returns a signal with an initial returned from `init-fn`. The signal
+  asynchronously produces whichever values are put on the `to` channel in the
+  `setup!` function."
+  [setup! init-fn source]
+  (let [topic [::splice init-fn setup! source]
         events-channel-fn (fn [live-graph _]
                             (let [from (async/tap (impl/signal-mult live-graph source)
                                                   (async/chan 1 impl/fresh-values))
                                   to (async/chan 1 (core/map (partial impl/make-event topic)))]
                               (setup! to from)
                               to))]
-    (impl/make-signal {:init init
+    (impl/make-signal {:init-fn init-fn
                        :deps [source]
                        :relayed-event-topic topic
                        :event-sources {topic events-channel-fn}})))
@@ -219,7 +227,7 @@
   the other values will be discarded. The initial value of the returned signal is
   equal to the initial value of the first source signal."
   [sigs]
-  (impl/make-signal {:init (:init (first sigs))
+  (impl/make-signal {:init-fn (:init-fn (first sigs))
                      :sources sigs
                      :msg-fn (fn [prev messages]
                                (first (filter impl/fresh? messages)))}))
@@ -244,7 +252,7 @@
   fresh value. For example, `(sample-on mouse/clicks mouse/position)` returns a signal
   of click positions."
   [sampler-sig value-sig]
-  (impl/make-signal {:init (:init value-sig)
+  (impl/make-signal {:init-fn (:init-fn value-sig)
                      :sources [sampler-sig value-sig]
                      :msg-fn (fn [prev [sampler-msg value-msg]]
                                (when (impl/fresh? sampler-msg)
@@ -273,9 +281,10 @@
   value of `sig` does not match the predicate, in which case `base` is used as the initial
   value of the new signal."
   [pred base sig]
-  (impl/make-signal {:init (if (pred (:init sig))
-                             (:init sig)
-                             base)
+  (impl/make-signal {:init-fn (let [init-fn (:init-fn sig)]
+                                (fn [live-graph opts]
+                                  (let [init (init-fn live-graph opts)]
+                                    (if (pred init) init base))))
                      :sources [sig]
                      :msg-fn (fn [prev [msg]]
                                (when (and (impl/fresh? msg)

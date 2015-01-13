@@ -2,12 +2,14 @@
 (ns jamesmacaulay.zelkova.window
   (:refer-clojure :exclude [meta])
   (:require [jamesmacaulay.zelkova.signal :as z]
+            [jamesmacaulay.zelkova.impl.signal :as impl]
             [clojure.core.async :as async]))
 
 #+cljs
 (ns jamesmacaulay.zelkova.window
   (:refer-clojure :exclude [meta])
   (:require [jamesmacaulay.zelkova.signal :as z]
+            [jamesmacaulay.zelkova.impl.signal :as impl]
             [jamesmacaulay.async-tools.core :as tools]
             [goog.events :as events]
             [cljs.core.async :as async :refer [>! <!]])
@@ -33,13 +35,14 @@
 (defn dimensions-channel
   [graph opts]
   #+cljs
-  (tools/concat (async/to-chan [(get-size opts)])
-                (listen js/window "resize" (map #(get-size opts))))
+  (listen js/window "resize" (map #(get-size opts)))
   #+clj
   (async/chan))
 
 (def dimensions
-  (z/input [0 0] ::dimensions dimensions-channel))
+  (impl/make-signal {:init-fn (fn [_ opts] (get-size opts))
+                     :relayed-event-topic ::dimensions
+                     :event-sources {::dimensions dimensions-channel}}))
 
 (def width (z/map first dimensions))
 

@@ -74,11 +74,13 @@
   `(timestamp mouse/x)` and `(timestamp mouse/y)` will always have the same
   timestamp because they rely on the same underlying event (`mouse/position`)."
   [sig]
-  (impl/make-signal {:init [0 (impl/init sig)]
-                     :sources [sig]
-                     :msg-fn (fn [_ [msg]]
-                               (when (impl/fresh? msg)
-                                 (impl/fresh (timestamp-vector msg))))}))
+  (let [sig-init (:init-fn sig)]
+    (impl/make-signal {:init-fn (fn [live-graph opts]
+                                  [(t/now) (sig-init live-graph opts)])
+                       :sources [sig]
+                       :msg-fn (fn [_ [msg]]
+                                 (when (impl/fresh? msg)
+                                   (impl/fresh (timestamp-vector msg))))})))
 
 #+cljs
 (defn delay
@@ -95,7 +97,7 @@
                         (>! waiting v)
                         (js/setTimeout fire! ms)
                         (recur)))))))
-            (impl/init sig)
+            (:init-fn sig)
             sig))
 
 #+cljs
