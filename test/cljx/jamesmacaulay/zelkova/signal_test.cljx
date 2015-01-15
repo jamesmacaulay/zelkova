@@ -35,24 +35,27 @@
          mapped #{input foldp}
          async #{mapped})))
 
-(deftest test-output-node->dependency-map
+(deftest test-calculate-graph-meta
   (let [input (z/input 0)
         foldp (z/foldp + 0 input)
         mapped (z/map vector input foldp)
         async (z/async mapped)]
-    (are [out deps] (= (impl/signal->dependency-maps out) deps)
+    (are [out deps] (= (impl/calculate-graph-meta out) deps)
          input {:parents-map {input #{}}
-                :kids-map {input #{}}}
+                :kids-map {input #{}}
+                :topsort [input]}
          foldp {:parents-map {input #{}
                               foldp #{input}}
                 :kids-map {input #{foldp}
-                           foldp #{}}}
+                           foldp #{}}
+                :topsort [input foldp]}
          mapped {:parents-map {input #{}
                                foldp #{input}
                                mapped #{input foldp}}
                  :kids-map {input #{foldp mapped}
                             foldp #{mapped}
-                            mapped #{}}}
+                            mapped #{}}
+                 :topsort [input foldp mapped]}
          async {:parents-map {input #{}
                               foldp #{input}
                               mapped #{input foldp}
@@ -60,7 +63,8 @@
                 :kids-map {input #{foldp mapped}
                            foldp #{mapped}
                            mapped #{async}
-                           async #{}}})))
+                           async #{}}
+                :topsort [input foldp mapped async]})))
 
 (deftest test-topsort
   (let [input (z/input 0)

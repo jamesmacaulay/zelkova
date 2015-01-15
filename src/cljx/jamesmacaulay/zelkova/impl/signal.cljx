@@ -142,7 +142,7 @@
               (recur (zip/up p)))
           [(zip/node p) :end]))))
 
-(defn signal->dependency-maps
+(defn calculate-dependency-maps
   "Takes a signal and returns a map of two maps:
     :parents-map is a map of signals to their parents,
     :kids-map is a map of signals to their children."
@@ -169,10 +169,15 @@
                       (zipmap parents (repeat #{this-sig})))
           next-sig)))))
 
+(defn calculate-graph-meta
+  [signal]
+  (let [{:keys [parents-map] :as dep-maps} (calculate-dependency-maps signal)]
+    (assoc dep-maps :topsort (-> parents-map kahn/kahn-sort reverse))))
+
 (defn output-node->dependency-map
   "Takes a signal and returns a map of signals to sets of signal dependencies."
   [output-node]
-  (-> output-node signal->dependency-maps :parents-map))
+  (-> output-node calculate-dependency-maps :parents-map))
 
 (defn topsort
   "Takes a signal and returns a topologically sorted sequence of all signals in its graph."
