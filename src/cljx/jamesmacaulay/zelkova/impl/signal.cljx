@@ -90,7 +90,7 @@
   [x]
   (satisfies? SignalProtocol x))
 
-(defrecord Signal
+(defrecord SignalDefinition
   [init-fn sources relayed-event-topic msg-fn deps event-sources]
   SignalProtocol
   (signal-deps [_]
@@ -114,7 +114,7 @@
   [opts]
   (-> opts
       (setup-event-relay)
-      (map->Signal)))
+      (map->SignalDefinition)))
 
 (def ^{:doc "A transducer which takes in batches of signal graph messages and pipes out fresh values."}
   fresh-values
@@ -347,7 +347,7 @@
           (connect-to-world))))
   (pipe-to-atom* [g atm ks]
     (pipe-to-atom* (spawn* g nil) atm ks))
-  Signal
+  SignalDefinition
   (spawn* [s opts] (spawn* (compile-graph s) opts))
   (pipe-to-atom* [s atm ks]
     (pipe-to-atom* (spawn* s nil) atm ks)))
