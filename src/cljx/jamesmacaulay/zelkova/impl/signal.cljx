@@ -82,40 +82,6 @@
   ([value] (->Cached value nil))
   ([value event] (->Cached value event)))
 
-(defprotocol SignalProtocol
-  (signal-deps [s] "returns the set of \"parent\" signal which this signal depends on"))
-
-(defn signal?
-  "returns `true` if the argument satisfies `SignalProtocol`, `false` otherwise"
-  [x]
-  (satisfies? SignalProtocol x))
-
-(defrecord SignalDefinition
-  [init-fn sources relayed-event-topic msg-fn deps event-sources]
-  SignalProtocol
-  (signal-deps [_]
-    (into #{}
-          (filter signal?)
-          (or deps sources))))
-
-(defn- setup-event-relay
-  "Takes a topic, and returns an input signal which relays matching events as messages to its children"
-  [opts]
-  (if-let [relayed-topic (:relayed-event-topic opts)]
-    (assoc opts
-      :sources [:events]
-      :msg-fn (fn [prev [event]]
-                (when (= relayed-topic (topic event))
-                  (fresh (value event)))))
-    opts))
-
-(defn make-signal
-  "Takes a map of opts and returns a signal."
-  [opts]
-  (-> opts
-      (setup-event-relay)
-      (map->SignalDefinition)))
-
 (def ^{:doc "A transducer which takes in batches of signal graph messages and pipes out fresh values."}
   fresh-values
   (comp cat
@@ -123,6 +89,18 @@
         (map value)))
 
 ; compiling graphs:
+
+(defprotocol SignalProtocol
+  (signal-deps [s] "returns the set of \"parent\" signals on which this signal depends")
+  (parents-map [s])
+  (kids-map [s])
+  (topsort [s])
+  (-get-graph-meta [s k]))
+
+(defn signal?
+  "returns `true` if the argument satisfies `SignalProtocol`, `false` otherwise"
+  [x]
+  (satisfies? SignalProtocol x))
 
 (defn- node-graph-zipper
   "Takes a signal and returns a zipper which can be used to traverse the signal graph."
@@ -179,13 +157,53 @@
   [output-node]
   (-> output-node calculate-dependency-maps :parents-map))
 
-(defn topsort
-  "Takes a signal and returns a topologically sorted sequence of all signals in its graph."
-  [output]
-  (-> output
-      output-node->dependency-map
-      kahn/kahn-sort
-      reverse))
+(defrecord SignalDefinitionMetadata
+  [parents-map kids-map topsort])
+
+(defrecord SignalDefinition
+  [init-fn sources relayed-event-topic msg-fn deps event-sources]
+  SignalProtocol
+  (signal-deps [_]
+    (into #{}
+          (filter signal?)
+          (or deps sources)))
+  (-get-graph-meta [s k]
+    (let [meta-atom (-> s meta (get k))
+          memoized @meta-atom]
+      (if-not (nil? memoized)
+        memoized
+        (let [{:keys [parents-map kids-map topsort]} (calculate-graph-meta s)
+              m (meta s)]
+          (-> m :parents-map (reset! parents-map))
+          (-> m :kids-map (reset! kids-map))
+          (-> m :topsort (reset! topsort))
+          @meta-atom))))
+  (parents-map [s] (-get-graph-meta s :parents-map))
+  (kids-map [s] (-get-graph-meta s :kids-map))
+  (topsort [s] (-get-graph-meta s :topsort)))
+
+(defn- setup-event-relay
+  "Takes a topic, and returns an input signal which relays matching events as messages to its children"
+  [opts]
+  (if-let [relayed-topic (:relayed-event-topic opts)]
+    (assoc opts
+      :sources [:events]
+      :msg-fn (fn [prev [event]]
+                (when (= relayed-topic (topic event))
+                  (fresh (value event)))))
+    opts))
+
+(defn- setup-metadata
+  [sig]
+  (with-meta sig (->SignalDefinitionMetadata (atom nil) (atom nil) (atom nil))))
+
+(defn make-signal
+  "Takes a map of opts and returns a signal."
+  [opts]
+  (-> opts
+      (setup-event-relay)
+      (map->SignalDefinition)
+      (setup-metadata)))
 
 (defrecord CompiledGraph
   [output-signal sorted-signals])
