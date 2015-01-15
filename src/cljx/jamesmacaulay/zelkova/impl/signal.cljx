@@ -205,15 +205,6 @@
       (map->SignalDefinition)
       (setup-metadata)))
 
-(defrecord CompiledGraph
-  [output-signal sorted-signals])
-
-(defn compile-graph
-  "Calculate the topological sort of the given signal and return a `CompiledGraph`."
-  [output-signal]
-  (let [sorted-signals (topsort output-signal)]
-    (->CompiledGraph output-signal sorted-signals)))
-
 ; dealing with multiple outputs:
 
 (defn- ensure-sequential
@@ -315,17 +306,17 @@
   (init [g]))
 
 (defrecord LiveChannelGraph
-  [compiled-graph events-channel mult-map opts]
+  [definition events-channel mult-map opts]
   LiveChannelGraphProtocol
-  (output-mult [_] (get mult-map (:output-signal compiled-graph)))
+  (output-mult [_] (get mult-map definition))
   (signal-mult [_ sig] (get mult-map sig))
   (connect-to-world [g]
-    (let [world (gather-event-sources (:sorted-signals compiled-graph))]
+    (let [world (gather-event-sources (topsort definition))]
       (doseq [channel-fn (vals world)]
         (async/pipe (channel-fn g opts)
                     events-channel)))
     g)
-  (init [g] ((-> compiled-graph :output-signal :init-fn) g opts))
+  (init [g] ((:init-fn definition) g opts))
   async-impl/Channel
   (close! [_] (async-impl/close! events-channel))
   (closed? [_] (async-impl/closed? events-channel))
@@ -348,24 +339,20 @@
 
 (extend-protocol SignalLike
   LiveChannelGraph
-  (spawn* [g opts] (spawn* (:compiled-graph g) opts))
+  (spawn* [g opts] (spawn* (:signal g) opts))
   (pipe-to-atom* [g atm ks]
     (tools/do-effects (if (seq ks)
                         (partial swap! atm assoc-in ks)
                         (partial reset! atm))
                       (async/tap g (async/chan 1 fresh-values)))
     atm)
-  CompiledGraph
-  (spawn* [g opts]
+  SignalDefinition
+  (spawn* [s opts]
     (let [events-channel (async/chan 1 events-xform)
           events-mult (async/mult events-channel)
-          mult-map (build-message-mult-map (:sorted-signals g) events-mult g opts)]
-      (-> g
+          mult-map (build-message-mult-map (topsort s) events-mult s opts)]
+      (-> s
           (->LiveChannelGraph events-channel mult-map opts)
           (connect-to-world))))
-  (pipe-to-atom* [g atm ks]
-    (pipe-to-atom* (spawn* g nil) atm ks))
-  SignalDefinition
-  (spawn* [s opts] (spawn* (compile-graph s) opts))
   (pipe-to-atom* [s atm ks]
     (pipe-to-atom* (spawn* s nil) atm ks)))
