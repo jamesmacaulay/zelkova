@@ -1,18 +1,17 @@
-#+clj
 (ns jamesmacaulay.zelkova.time
+  "Functions for working with time."
   (:refer-clojure :exclude [second delay])
-  (:require [jamesmacaulay.zelkova.platform.time :as t]
+  #+clj
+  (:require [jamesmacaulay.zelkova.impl.time :as t]
             [jamesmacaulay.zelkova.signal :as z]
             [jamesmacaulay.zelkova.impl.signal :as impl]
-            [clojure.core.async :as async :refer [>! <! go go-loop]]))
-
-#+cljs
-(ns jamesmacaulay.zelkova.time
-  (:refer-clojure :exclude [second delay])
-  (:require [jamesmacaulay.zelkova.platform.time :as t]
+            [clojure.core.async :as async :refer [>! <! go go-loop]])
+  #+cljs
+  (:require [jamesmacaulay.zelkova.impl.time :as t]
             [jamesmacaulay.zelkova.signal :as z]
             [jamesmacaulay.zelkova.impl.signal :as impl]
             [cljs.core.async :as async :refer [>! <!]])
+  #+cljs
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (def millisecond 1)
