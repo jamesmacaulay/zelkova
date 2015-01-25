@@ -94,8 +94,7 @@
   (signal-deps [s] "returns the set of \"parent\" signals on which this signal depends")
   (parents-map [s])
   (kids-map [s])
-  (topsort [s])
-  (-get-graph-meta [s k]))
+  (topsort [s]))
 
 (defn signal?
   "returns `true` if the argument satisfies `SignalProtocol`, `false` otherwise"
@@ -160,6 +159,16 @@
 (defrecord SignalDefinitionMetadata
   [parents-map kids-map topsort])
 
+(defn- setup-metadata
+  [sig]
+  (let [delayed-graph-meta (delay (calculate-graph-meta sig))
+        delayed-parents-map (delay (:parents-map @delayed-graph-meta))
+        delayed-kids-map (delay (:kids-map @delayed-graph-meta))
+        delayed-topsort (delay (:topsort @delayed-graph-meta))]
+    (with-meta sig (->SignalDefinitionMetadata delayed-parents-map
+                                               delayed-kids-map
+                                               delayed-topsort))))
+
 (defrecord SignalDefinition
   [init-fn sources relayed-event-topic msg-fn deps event-sources]
   SignalProtocol
@@ -167,20 +176,9 @@
     (into #{}
           (filter signal?)
           (or deps sources)))
-  (-get-graph-meta [s k]
-    (let [meta-atom (-> s meta (get k))
-          memoized @meta-atom]
-      (if-not (nil? memoized)
-        memoized
-        (let [{:keys [parents-map kids-map topsort]} (calculate-graph-meta s)
-              m (meta s)]
-          (-> m :parents-map (reset! parents-map))
-          (-> m :kids-map (reset! kids-map))
-          (-> m :topsort (reset! topsort))
-          @meta-atom))))
-  (parents-map [s] (-get-graph-meta s :parents-map))
-  (kids-map [s] (-get-graph-meta s :kids-map))
-  (topsort [s] (-get-graph-meta s :topsort)))
+  (parents-map [s] (-> s meta :parents-map deref))
+  (kids-map [s] (-> s meta :kids-map deref))
+  (topsort [s] (-> s meta :topsort deref)))
 
 (defn- setup-event-relay
   "Takes a topic, and returns an input signal which relays matching events as messages to its children"
@@ -192,10 +190,6 @@
                 (when (= relayed-topic (topic event))
                   (fresh (value event)))))
     opts))
-
-(defn- setup-metadata
-  [sig]
-  (with-meta sig (->SignalDefinitionMetadata (atom nil) (atom nil) (atom nil))))
 
 (defn make-signal
   "Takes a map of opts and returns a signal."
