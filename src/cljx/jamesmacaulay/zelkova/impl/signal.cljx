@@ -91,6 +91,7 @@
 ; compiling graphs:
 
 (defprotocol SignalProtocol
+  (input? [s])
   (signal-deps [s] "returns the set of \"parent\" signals on which this signal depends")
   (parents-map [s])
   (kids-map [s])
@@ -166,6 +167,7 @@
 (defrecord SignalDefinition
   [init-fn sources relayed-event-topic msg-fn deps event-sources]
   SignalProtocol
+  (input? [_] (some #{:events} sources))
   (signal-deps [_]
     (into #{}
           (filter signal?)
