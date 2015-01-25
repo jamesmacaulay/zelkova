@@ -146,25 +146,19 @@
                       (zipmap parents (repeat #{this-sig})))
           next-sig)))))
 
-(defn calculate-graph-meta
-  [signal]
-  (let [{:keys [parents-map] :as dep-maps} (calculate-dependency-maps signal)]
-    (assoc dep-maps :topsort (-> parents-map kahn/kahn-sort reverse))))
-
-(defn output-node->dependency-map
-  "Takes a signal and returns a map of signals to sets of signal dependencies."
-  [output-node]
-  (-> output-node calculate-dependency-maps :parents-map))
+(defn parents-map->topsort
+  [pm]
+  (->> pm (kahn/kahn-sort) (reverse) (into [])))
 
 (defrecord SignalDefinitionMetadata
   [parents-map kids-map topsort])
 
-(defn- setup-metadata
+(defn- attach-delayed-metadata
   [sig]
-  (let [delayed-graph-meta (delay (calculate-graph-meta sig))
-        delayed-parents-map (delay (:parents-map @delayed-graph-meta))
-        delayed-kids-map (delay (:kids-map @delayed-graph-meta))
-        delayed-topsort (delay (:topsort @delayed-graph-meta))]
+  (let [delayed-dep-maps (delay (calculate-dependency-maps sig))
+        delayed-parents-map (delay (:parents-map @delayed-dep-maps))
+        delayed-kids-map (delay (:kids-map @delayed-dep-maps))
+        delayed-topsort (delay (parents-map->topsort @delayed-parents-map))]
     (with-meta sig (->SignalDefinitionMetadata delayed-parents-map
                                                delayed-kids-map
                                                delayed-topsort))))
@@ -197,7 +191,7 @@
   (-> opts
       (setup-event-relay)
       (map->SignalDefinition)
-      (setup-metadata)))
+      (attach-delayed-metadata)))
 
 ; dealing with multiple outputs:
 
