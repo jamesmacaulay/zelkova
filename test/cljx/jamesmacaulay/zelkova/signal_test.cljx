@@ -35,42 +35,33 @@
          mapped #{input foldp}
          async #{mapped})))
 
-(deftest test-calculate-graph-meta
+(deftest test-memoized-graph-calculations
   (let [input (z/input 0)
         foldp (z/foldp + 0 input)
         mapped (z/map vector input foldp)
         async (z/async mapped)]
-    (are [out deps] (= (impl/calculate-graph-meta out) deps)
-         input {:parents-map {input #{}}
-                :kids-map {input #{}}
-                :topsort [input]}
-         foldp {:parents-map {input #{}
-                              foldp #{input}}
-                :kids-map {input #{foldp}
-                           foldp #{}}
-                :topsort [input foldp]}
-         mapped {:parents-map {input #{}
-                               foldp #{input}
-                               mapped #{input foldp}}
-                 :kids-map {input #{foldp mapped}
-                            foldp #{mapped}
-                            mapped #{}}
-                 :topsort [input foldp mapped]}
-         async {:parents-map {input #{}
-                              foldp #{input}
-                              mapped #{input foldp}
-                              async #{mapped}}
-                :kids-map {input #{foldp mapped}
-                           foldp #{mapped}
-                           mapped #{async}
-                           async #{}}
-                :topsort [input foldp mapped async]})))
-
-(deftest test-topsort
-  (let [input (z/input 0)
-        foldp (z/foldp + 0 input)
-        mapped (z/map vector input foldp)
-        async (z/async mapped)]
+    (are [out parents-map] (= (impl/parents-map out) parents-map)
+         input {input #{}}
+         foldp {input #{}
+                foldp #{input}}
+         mapped {input #{}
+                 foldp #{input}
+                 mapped #{input foldp}}
+         async {input #{}
+                foldp #{input}
+                mapped #{input foldp}
+                async #{mapped}})
+    (are [out kids-map] (= (impl/kids-map out) kids-map)
+         input {input #{}}
+         foldp {input #{foldp}
+                foldp #{}}
+         mapped {input #{foldp mapped}
+                 foldp #{mapped}
+                 mapped #{}}
+         async {input #{foldp mapped}
+                foldp #{mapped}
+                mapped #{async}
+                async #{}})
     (are [out sorted-sigs] (= (impl/topsort out) sorted-sigs)
          input [input]
          foldp [input foldp]
