@@ -484,3 +484,33 @@
                                                        from)))
                      (z/spawn))]
       (is (= :a (impl/init graph))))))
+
+(deftest-async test-activate-when
+  (go
+    (let [go-to-path (event-constructor :path)
+          click (impl/make-event :mouse-clicks :click)
+          path (z/input "/" :path)
+          mouse-clicks (z/input :click :mouse-clicks)
+          foo-path? (z/map #{"/foo"} path)
+          clicks-count (z/count mouse-clicks)
+          clicks-count-activated-on-foo-path (z/activate-when foo-path? clicks-count)
+          combined (z/template {:path path
+                                :count clicks-count
+                                :count-on-foo clicks-count-activated-on-foo-path})
+          graph (z/spawn combined)
+          out (async/tap graph (chan 1 impl/fresh-values))]
+      (async/onto-chan graph [click
+                              (go-to-path "/foo")
+                              click
+                              click
+                              (go-to-path "/bar")
+                              click
+                              click])
+      (is (= [{:path "/" :count 1 :count-on-foo 0}
+              {:path "/foo" :count 1 :count-on-foo 0}
+              {:path "/foo" :count 2 :count-on-foo 1}
+              {:path "/foo" :count 3 :count-on-foo 2}
+              {:path "/bar" :count 3 :count-on-foo 2}
+              {:path "/bar" :count 4 :count-on-foo 2}
+              {:path "/bar" :count 5 :count-on-foo 2}]
+             (<! (async/into [] out)))))))

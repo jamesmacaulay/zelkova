@@ -281,38 +281,76 @@
 
 (defn keep-if
   "Returns a signal which relays values from `sig`, but discards any which don't match
-  the given predicate function `pred`. A `base` value must be provided in case the initial
-  value of `sig` does not match the predicate, in which case `base` is used as the initial
-  value of the new signal."
-  [pred base sig]
-  (impl/make-signal {:init-fn (let [init-fn (:init-fn sig)]
-                                (fn [live-graph opts]
-                                  (let [init (init-fn live-graph opts)]
-                                    (if (pred init) init base))))
-                     :sources [sig]
-                     :msg-fn (fn [prev [msg]]
-                               (when (and (impl/fresh? msg)
-                                          (pred (impl/value msg)))
-                                 (impl/fresh (impl/value msg))))}))
+  the given predicate function `pred`. If a `base` value is provided, it will be the
+  initial value of the returned signal if the initial value of `sig` does not match the
+  predicate. If no `base` is provided then the returned signal will always have the
+  same initial value as `sig`, even if it does not match the predicate."
+  ([pred sig]
+    (impl/make-signal {:init-fn (:init-fn sig)
+                       :sources [sig]
+                       :msg-fn  (fn [_ [msg]]
+                                  (when (and (impl/fresh? msg)
+                                             (pred (impl/value msg)))
+                                    (impl/fresh (impl/value msg))))}))
+  ([pred base sig]
+    (impl/make-signal {:init-fn (let [init-fn (:init-fn sig)]
+                                  (fn [live-graph opts]
+                                    (let [init (init-fn live-graph opts)]
+                                      (if (pred init) init base))))
+                       :sources [sig]
+                       :msg-fn  (fn [_ [msg]]
+                                  (when (and (impl/fresh? msg)
+                                             (pred (impl/value msg)))
+                                    (impl/fresh (impl/value msg))))})))
 
 (defn drop-if
   "Like `keep-if`, but drops values which match the predicate."
-  [pred base sig]
-  (keep-if (complement pred) base sig))
+  ([pred sig]
+    (keep-if (complement pred) sig))
+  ([pred base sig]
+    (keep-if (complement pred) base sig)))
 
 (defn keep-when
   "Returns a new signal which relays values from `value-sig`, but only when the current
   value of `switch-sig` is truthy."
-  [switch-sig base value-sig]
-  (->> value-sig
-       (map vector (sample-on value-sig switch-sig))
-       (keep-if first [false base])
-       (map second)))
+  ([switch-sig value-sig]
+    (->> value-sig
+         (map vector (sample-on value-sig switch-sig))
+         (keep-if first)
+         (map second)))
+  ([switch-sig base value-sig]
+    (->> value-sig
+         (map vector (sample-on value-sig switch-sig))
+         (keep-if first [false base])
+         (map second))))
 
 (defn drop-when
   "Like `keep-when`, but only relays values when `switch-sig` is falsy."
-  [switch-sig base value-sig]
-  (keep-when (map not switch-sig) base value-sig))
+  ([switch-sig value-sig]
+    (keep-when (map not switch-sig) value-sig))
+  ([switch-sig base value-sig]
+    (keep-when (map not switch-sig) base value-sig)))
+
+(defn activate-when
+  "Returns a transformation of `value-sig` whose entire graph of signal
+   dependencies—aside from input nodes—is skipped unless `switch-sig`'s state
+   is truthy. This is accomplished by walking `value-sig`'s graph and wrapping
+   its input signals with `keep-when`. The intial value of a signal returned
+   from `activate-when` is always equal to the initial value of `value-sig`."
+  [switch-sig value-sig]
+  (let [sorted-signals (impl/topsort value-sig)
+        reducer (fn [m sig]
+                  (let [sig' (-> sig
+                                 (update :sources (partial mapv m))
+                                 (update :deps #(if (nil? %) % (mapv m %))))
+                        sig'' (if (impl/input? sig')
+                                (keep-when switch-sig sig')
+                                sig')]
+                    (assoc m sig sig'')))
+        signal-mapping (reduce reducer
+                               {:events :events}
+                               sorted-signals)]
+    (get signal-mapping value-sig)))
 
 (defn log
   "A little convenience helper which logs signal values with `pr` before propagating them unchanged."
