@@ -7,7 +7,7 @@
                  [org.clojure/clojurescript "0.0-2850"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
   :plugins [[lein-cljsbuild "1.0.4"]
-            [com.keminglabs/cljx "0.5.0" :exclusions [org.clojure/clojure]]
+            [com.keminglabs/cljx "0.5.0" :exclusions [org.clojure/clojure com.cemerick/piggieback]]
             [com.cemerick/clojurescript.test "0.3.3"]]
   :jar-exclusions [#"\.cljx"]
   :aliases {"repl" ["with-profile" "repl" "repl"]
@@ -17,7 +17,8 @@
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.9"]
                                   [org.clojure/tools.nrepl "0.2.7"]
-                                  [com.cemerick/clojurescript.test "0.3.3"]]
+                                  [com.cemerick/clojurescript.test "0.3.3"]
+                                  [com.cemerick/piggieback "0.1.5"]]
                    :source-paths ["target/classes"]}
              :repl [:dev {:source-paths ["repl" "target/classes" "target/generated/test/clj" "target/generated/test/cljs"]
                           :test-paths ["target/generated/test/clj" "target/generated/test/cljs"]}]
