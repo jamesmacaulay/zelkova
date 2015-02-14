@@ -117,18 +117,18 @@
 
 (def input
   (let [delta (z/map #(/ % 20)
-                      (time/fps 25))]
+                     (time/fps 25))]
     (z/sample-on delta
                  (z/map vector
-                         delta
-                         keyboard/arrows))))
+                        delta
+                        keyboard/arrows))))
 
 ;main  = lift2 render Window.dimensions (foldp step mario input)
 
 (def main
   (z/map render-state
-          window/dimensions
-          (z/foldp step mario input)))
+         window/dimensions
+         (z/foldp step mario input)))
 
 (def app-state (z/pipe-to-atom main))
 

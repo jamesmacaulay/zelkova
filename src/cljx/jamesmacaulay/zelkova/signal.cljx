@@ -132,8 +132,8 @@ value of each signal in place of the signal itself."
   [signal-map]
   (let [ks (keys signal-map)]
     (mapseq (fn [& values]
-               (zipmap ks values))
-             (vals signal-map))))
+              (zipmap ks values))
+            (vals signal-map))))
 
 (defn foldp
   "Create a past-dependent signal (\"fold into the past\"). The values of a `foldp`
