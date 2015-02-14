@@ -5,8 +5,7 @@
             [jamesmacaulay.zelkova.signal-test :as signals-test]
             [clojure.core.async :as async :refer [go go-loop <! <!! >! >!! chan]]
             [clojure.tools.namespace.repl :refer [refresh]]
-            [clojure.test]
-            [cemerick.austin.repls]))
+            [clojure.test]))
 
 (defn run-tests
   []
