@@ -38,12 +38,15 @@
   #+clj
   (async/chan))
 
+(def ^:private dimensions-events-fn
+  (impl/value-source->events-fn dimensions-channel ::dimensions))
+
 (def ^{:doc "A signal of `[x y]` vectors representing the current dimensions of
 the window."}
   dimensions
   (impl/make-signal {:init-fn (fn [_ opts] (get-size opts))
                      :relayed-event-topic ::dimensions
-                     :event-sources {::dimensions dimensions-channel}}))
+                     :event-sources {::dimensions dimensions-events-fn}}))
 
 (def ^{:doc "A signal of the current width of the window."}
   width

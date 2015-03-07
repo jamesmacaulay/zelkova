@@ -346,3 +346,37 @@
           (connect-to-world))))
   (pipe-to-atom* [s atm ks]
     (pipe-to-atom* (spawn* s nil) atm ks)))
+
+
+
+(defmulti value-source->events-fn
+  "Takes some asynchronous `source` of values, plus an event `topic`, and returns
+an event-source function. `source` may be one of the following:
+
+* a function taking a live graph and an options map, and returns a channel of values
+* a channel of values
+* a mult of some such value channel
+
+The returned event-source function has the same signature as the functions that can
+be supplied for the `source` argument, but the values are wrapped as Events."
+  (fn [source topic]
+    (cond
+      (satisfies? async/Mult source) :mult
+      (satisfies? async-impl/ReadPort source) :readport
+      (ifn? source) :ifn)))
+
+(defmethod value-source->events-fn :ifn
+  [src-fn topic]
+  (fn [graph opts]
+    (let [ch (src-fn graph opts)]
+      (async/pipe ch (async/chan 1 (map (partial make-event topic)))))))
+
+(defmethod value-source->events-fn :mult
+  [src-mult topic]
+  (value-source->events-fn (fn [_ _] (async/tap src-mult (async/chan)))
+                           topic))
+
+(defmethod value-source->events-fn :readport
+  [src-chan topic]
+  (value-source->events-fn (async/mult src-chan)
+                           topic))
