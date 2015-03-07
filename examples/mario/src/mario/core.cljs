@@ -11,8 +11,7 @@
 
 (enable-console-print!)
 
-; A little excercise to get a feel for how this might work...
-; Here is Elm's Mario example, translated into a possible Clojure form from this version:
+; Here is Elm's Mario example, translated to ClojureScript/Zelkova from this version:
 ; https://github.com/elm-lang/elm-lang.org/blob/009de952c89592c180c43b60137f338651a1f9f6/public/examples/Intermediate/Mario.elm
 
 ;import Keyboard
