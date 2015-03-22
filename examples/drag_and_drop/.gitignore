@@ -1,4 +1,5 @@
 /resources/public/js/compiled/**
+!/resources/public/js/compiled/drag_and_drop.js
 figwheel_server.log
 pom.xml
 *jar
