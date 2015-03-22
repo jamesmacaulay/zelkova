@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies [[org.clojure/clojure "1.7.0-alpha5"]
-                 [org.clojure/clojurescript "0.0-2850"]
+                 [org.clojure/clojurescript "0.0-3126"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [jamesmacaulay/zelkova "0.3.1-SNAPSHOT"]
                  [figwheel "0.2.5-SNAPSHOT"]

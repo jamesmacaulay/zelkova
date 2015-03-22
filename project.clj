@@ -4,7 +4,7 @@
   :license {:name "MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.7.0-alpha5"]
-                 [org.clojure/clojurescript "0.0-2850"]
+                 [org.clojure/clojurescript "0.0-3126"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
   :plugins [[lein-cljsbuild "1.0.4"]
             [com.keminglabs/cljx "0.5.0" :exclusions [org.clojure/clojure
@@ -17,8 +17,8 @@
             "cljs-test" ["do" "cljx" ["cljsbuild" "test"]]
             "cljs-autotest" ["do" "cljx" ["cljsbuild" "auto" "test"]]
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
-  :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.9"]
-                                  [org.clojure/tools.nrepl "0.2.7"]
+  :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.10"]
+                                  [org.clojure/tools.nrepl "0.2.8"]
                                   [com.cemerick/piggieback "0.1.5"]
                                   [net.cgrand/parsley "0.9.3" :exclusions [org.clojure/clojure]]]
                    :source-paths ["target/classes"]}
