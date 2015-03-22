@@ -1,13 +1,10 @@
 (ns ^:figwheel-always mario.core
   (:require [om.core :as om :include-macros true]
             [om.dom :as dom :include-macros true]
-            [cljs.core.async :as async :refer [>! <!]]
             [jamesmacaulay.zelkova.signal :as z]
             [jamesmacaulay.zelkova.time :as time]
             [jamesmacaulay.zelkova.keyboard :as keyboard]
-            [jamesmacaulay.zelkova.window :as window]
-            [jamesmacaulay.async-tools.core :as tools])
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
+            [jamesmacaulay.zelkova.window :as window]))
 
 (enable-console-print!)
 
