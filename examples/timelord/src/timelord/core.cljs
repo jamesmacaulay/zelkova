@@ -1,19 +1,31 @@
 (ns ^:figwheel-always timelord.core
-    (:require
-              [reagent.core :as reagent :refer [atom]]))
+  (:require [reagent.core :as reagent :refer [atom]]
+            [jamesmacaulay.zelkova.signal :as z]
+            [jamesmacaulay.zelkova.impl.signal :as zimpl]
+            [jamesmacaulay.zelkova.mouse :as mouse]
+            [jamesmacaulay.zelkova.time :as time]))
 
 (enable-console-print!)
 
-(println "Edits to this text should show up in your developer console.")
+(def app-signal (z/template {:timestamped (time/timestamp mouse/position)
+                             :delayed (time/delay 1000 mouse/position)
+                             :debounced (time/debounce 500 mouse/position)}))
 
-;; define your app data so that it doesn't get over-written on reload
+(def live-graph (z/spawn app-signal))
 
-(defonce app-state (atom {:text "Hello world!"}))
+;; -------------------------
+;; State
+(defonce app-state (atom (zimpl/init live-graph)))
 
-(defn hello-world []
-  [:h1 (:text @app-state)])
-
-(reagent/render-component [hello-world]
-                          (. js/document (getElementById "app")))
+(z/pipe-to-atom live-graph app-state)
 
 
+;; -------------------------
+;; Views
+
+(defn main-page []
+  [:div [:pre (pr-str @app-state)]])
+
+;; -------------------------
+;; Initialize app
+(reagent/render-component [main-page] (.getElementById js/document "app"))
