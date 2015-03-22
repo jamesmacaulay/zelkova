@@ -42,6 +42,6 @@
 
 ## License
 
-Copyright © 2014
+Copyright © 2014-2015
 
 Distributed under the MIT License.
