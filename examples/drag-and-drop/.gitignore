@@ -1,3 +1,5 @@
+/resources/public/js/compiled/**
+figwheel_server.log
 pom.xml
 *jar
 /lib/
@@ -7,3 +9,5 @@ pom.xml
 .lein-deps-sum
 .lein-repl-history
 .lein-plugins/
+.repl
+.nrepl-port
