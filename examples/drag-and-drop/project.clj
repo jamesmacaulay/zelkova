@@ -4,10 +4,11 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
-  :dependencies [[org.clojure/clojure "1.6.0"]
+  :dependencies [[org.clojure/clojure "1.7.0-alpha5"]
                  [org.clojure/clojurescript "0.0-2850"]
-                 [figwheel "0.2.5-SNAPSHOT"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+                 [jamesmacaulay/zelkova "0.2.1-SNAPSHOT"]
+                 [figwheel "0.2.5-SNAPSHOT"]
                  [sablono "0.3.4"]
                  [org.omcljs/om "0.8.8"]]
 
