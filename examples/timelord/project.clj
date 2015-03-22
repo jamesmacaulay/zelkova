@@ -7,7 +7,7 @@
   :dependencies [[org.clojure/clojure "1.7.0-alpha5"]
                  [org.clojure/clojurescript "0.0-2850"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-                 [jamesmacaulay/zelkova "0.2.1-SNAPSHOT"]
+                 [jamesmacaulay/zelkova "0.3.0"]
                  [figwheel "0.2.5-SNAPSHOT"]
                  [reagent "0.5.0-alpha3"]]
 
