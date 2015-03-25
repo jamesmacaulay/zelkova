@@ -96,7 +96,8 @@
   (parents-map [s])
   (kids-map [s])
   (topsort [s])
-  (inputs-by-topic [s]))
+  (inputs-by-topic [s])
+  (kid-indexes-map [s]))
 
 (defn signal?
   "returns `true` if the argument satisfies `SignalProtocol`, `false` otherwise"
@@ -161,8 +162,15 @@
           {}
           sorted-sigs))
 
+(defn build-kid-indexes-map
+  [kids-map sorted-sigs]
+  (let [signal->index (zipmap sorted-sigs (range))
+        signals->sorted-index-set #(into (sorted-set) (map signal->index) %)]
+    (zipmap (keys kids-map)
+            (map signals->sorted-index-set (vals kids-map)))))
+
 (defrecord SignalDefinitionMetadata
-  [parents-map kids-map topsort inputs-by-topic])
+  [parents-map kids-map topsort kid-indexes-map inputs-by-topic])
 
 (defn- attach-delayed-metadata
   [sig]
@@ -170,10 +178,12 @@
         delayed-parents-map (delay (:parents-map @delayed-dep-maps))
         delayed-kids-map (delay (:kids-map @delayed-dep-maps))
         delayed-topsort (delay (parents-map->topsort @delayed-parents-map))
-        delayed-topic-map (delay (topsort->topic-map @delayed-topsort))]
+        delayed-topic-map (delay (topsort->topic-map @delayed-topsort))
+        delayed-kid-indexes-map (delay (build-kid-indexes-map @delayed-kids-map @delayed-topsort))]
     (with-meta sig (->SignalDefinitionMetadata delayed-parents-map
                                                delayed-kids-map
                                                delayed-topsort
+                                               delayed-kid-indexes-map
                                                delayed-topic-map))))
 
 (defrecord SignalDefinition
@@ -187,7 +197,8 @@
   (parents-map [s] (-> s meta :parents-map deref))
   (kids-map [s] (-> s meta :kids-map deref))
   (topsort [s] (-> s meta :topsort deref))
-  (inputs-by-topic [s] (-> s meta :inputs-by-topic deref)))
+  (inputs-by-topic [s] (-> s meta :inputs-by-topic deref))
+  (kid-indexes-map [s] (-> s meta :kid-indexes-map deref)))
 
 (defn- setup-event-relay
   "Takes a topic, and returns an input signal which relays matching events as messages to its children"
