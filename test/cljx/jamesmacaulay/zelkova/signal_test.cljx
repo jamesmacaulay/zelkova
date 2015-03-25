@@ -36,11 +36,11 @@
          async #{mapped})))
 
 (deftest test-memoized-graph-calculations
-  (let [input (z/input 0)
+  (let [input (z/input 0 :some-topic)
         foldp (z/foldp + 0 input)
         mapped (z/map vector input foldp)
         async (z/async mapped)]
-    (are [out parents-map] (= (impl/parents-map out) parents-map)
+    (are [sig parents-map] (= (impl/parents-map sig) parents-map)
          input {input #{}}
          foldp {input #{}
                 foldp #{input}}
@@ -51,7 +51,7 @@
                 foldp #{input}
                 mapped #{input foldp}
                 async #{mapped}})
-    (are [out kids-map] (= (impl/kids-map out) kids-map)
+    (are [sig kids-map] (= (impl/kids-map sig) kids-map)
          input {input #{}}
          foldp {input #{foldp}
                 foldp #{}}
@@ -62,11 +62,17 @@
                 foldp #{mapped}
                 mapped #{async}
                 async #{}})
-    (are [out sorted-sigs] (= (impl/topsort out) sorted-sigs)
+    (are [sig sorted-sigs] (= (impl/topsort sig) sorted-sigs)
          input [input]
          foldp [input foldp]
          mapped [input foldp mapped]
-         async [input foldp mapped async])))
+         async [input foldp mapped async])
+    (are [sig inputs-by-topic] (= (impl/inputs-by-topic sig) inputs-by-topic)
+         input {:some-topic [input]}
+         foldp {:some-topic [input]}
+         mapped {:some-topic [input]}
+         async {:some-topic [input]
+                (:relayed-event-topic async) [async]})))
 
 (deftest-async test-wiring-things-up
   (go

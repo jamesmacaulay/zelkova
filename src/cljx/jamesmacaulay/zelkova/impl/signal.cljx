@@ -95,7 +95,8 @@
   (signal-deps [s] "returns the set of \"parent\" signals on which this signal depends")
   (parents-map [s])
   (kids-map [s])
-  (topsort [s]))
+  (topsort [s])
+  (inputs-by-topic [s]))
 
 (defn signal?
   "returns `true` if the argument satisfies `SignalProtocol`, `false` otherwise"
@@ -151,18 +152,29 @@
   [pm]
   (->> pm (kahn/kahn-sort) (reverse) (into [])))
 
+(defn topsort->topic-map
+  [sorted-sigs]
+  (reduce (fn [m sig]
+            (if-let [topic (:relayed-event-topic sig)]
+              (assoc m topic (conj (get m topic []) sig))
+              m))
+          {}
+          sorted-sigs))
+
 (defrecord SignalDefinitionMetadata
-  [parents-map kids-map topsort])
+  [parents-map kids-map topsort inputs-by-topic])
 
 (defn- attach-delayed-metadata
   [sig]
   (let [delayed-dep-maps (delay (calculate-dependency-maps sig))
         delayed-parents-map (delay (:parents-map @delayed-dep-maps))
         delayed-kids-map (delay (:kids-map @delayed-dep-maps))
-        delayed-topsort (delay (parents-map->topsort @delayed-parents-map))]
+        delayed-topsort (delay (parents-map->topsort @delayed-parents-map))
+        delayed-topic-map (delay (topsort->topic-map @delayed-topsort))]
     (with-meta sig (->SignalDefinitionMetadata delayed-parents-map
                                                delayed-kids-map
-                                               delayed-topsort))))
+                                               delayed-topsort
+                                               delayed-topic-map))))
 
 (defrecord SignalDefinition
   [init-fn sources relayed-event-topic msg-fn deps event-sources]
@@ -174,7 +186,8 @@
           (or deps sources)))
   (parents-map [s] (-> s meta :parents-map deref))
   (kids-map [s] (-> s meta :kids-map deref))
-  (topsort [s] (-> s meta :topsort deref)))
+  (topsort [s] (-> s meta :topsort deref))
+  (inputs-by-topic [s] (-> s meta :inputs-by-topic deref)))
 
 (defn- setup-event-relay
   "Takes a topic, and returns an input signal which relays matching events as messages to its children"
