@@ -63,10 +63,6 @@
   [ms]
   (z/input (t/now) [::every ms] (every-channel-fn ms)))
 
-(def ^:private timestamp-vector
-  (juxt (comp impl/timestamp impl/origin-event)
-        impl/value))
-
 (defn timestamp
   "Add a timestamp to any signal. Returns a signal of `[timestamp value]`
   vectors. Timestamps are tied to the origin events of a signal value, so
@@ -77,9 +73,9 @@
     (impl/make-signal {:init-fn (fn [live-graph opts]
                                   [(t/now) (sig-init live-graph opts)])
                        :sources [sig]
-                       :msg-fn (fn [_ [msg]]
+                       :msg-fn (fn [event _prev [msg]]
                                  (when (impl/fresh? msg)
-                                   (impl/fresh (timestamp-vector msg))))})))
+                                   (impl/fresh [(impl/timestamp event) (impl/value msg)])))})))
 
 #+cljs
 (defn delay

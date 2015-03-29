@@ -50,7 +50,7 @@ _last_ of those emitted. Stateful transducers will give unexpected results and
 are not supported."
   [xform base sig]
   (let [xform' (comp (core/map impl/value) xform (core/map impl/fresh))
-        msg-fn (fn [prev [msg :as msg-in-seq]]
+        msg-fn (fn [_event _prev [msg :as msg-in-seq]]
                  (when (impl/fresh? msg)
                    (sequence xform' msg-in-seq)))
         init-fn (:init-fn sig)
@@ -58,7 +58,7 @@ are not supported."
                    (let [msg (->> (init-fn live-graph opts)
                                   (impl/fresh)
                                   (vector)
-                                  (msg-fn nil)
+                                  (msg-fn nil nil)
                                   (last))]
                      (if (nil? msg)
                        base
@@ -74,13 +74,13 @@ signal of values obtained by applying `f` to the values from the source signals.
   (if (empty? sources)
     (constant (f))
     (let [sources (vec sources)
-          emit-message (fn [_ messages]
+          emit-message (fn [_event _prev messages]
                          (when (some impl/fresh? messages)
                            (impl/fresh (apply f (mapv impl/value messages)))))]
       (impl/make-signal {:init-fn (fn [live-graph opts]
                                     (->> sources
                                          (mapv #(impl/fresh ((:init-fn %) live-graph opts)))
-                                         (emit-message nil)
+                                         (emit-message nil nil)
                                          impl/value))
                          :sources sources
                          :msg-fn emit-message}))))
@@ -110,7 +110,7 @@ therefore acts as the seed accumulator."
   [f base source]
   (impl/make-signal {:init-fn (constantly base)
                      :sources [source]
-                     :msg-fn (fn [acc [message]]
+                     :msg-fn (fn [_event acc [message]]
                                (when (impl/fresh? message)
                                  (impl/fresh (f (impl/value message)
                                                   (impl/value acc)))))}))
@@ -120,7 +120,7 @@ therefore acts as the seed accumulator."
   [sig]
   (impl/make-signal {:init-fn (:init-fn sig)
                      :sources [sig]
-                     :msg-fn (fn [prev [msg]]
+                     :msg-fn (fn [_event prev [msg]]
                                (when (and (impl/fresh? msg)
                                           (not= (impl/value msg) (impl/value prev)))
                                  msg))}))
@@ -201,7 +201,7 @@ equal to the initial value of the first source signal."
   [sigs]
   (impl/make-signal {:init-fn (:init-fn (first sigs))
                      :sources sigs
-                     :msg-fn (fn [prev messages]
+                     :msg-fn (fn [_event _prev messages]
                                (first (filter impl/fresh? messages)))}))
 
 (defn merge
@@ -226,7 +226,7 @@ of click positions."
   [sampler-sig value-sig]
   (impl/make-signal {:init-fn (:init-fn value-sig)
                      :sources [sampler-sig value-sig]
-                     :msg-fn (fn [prev [sampler-msg value-msg]]
+                     :msg-fn (fn [_event _prev [sampler-msg value-msg]]
                                (when (impl/fresh? sampler-msg)
                                  (impl/fresh (impl/value value-msg))))}))
 
@@ -256,7 +256,7 @@ same initial value as `sig`, even if it does not match the predicate."
   ([pred sig]
     (impl/make-signal {:init-fn (:init-fn sig)
                        :sources [sig]
-                       :msg-fn  (fn [_ [msg]]
+                       :msg-fn  (fn [_event _prev [msg]]
                                   (when (and (impl/fresh? msg)
                                              (pred (impl/value msg)))
                                     (impl/fresh (impl/value msg))))}))
@@ -266,7 +266,7 @@ same initial value as `sig`, even if it does not match the predicate."
                                     (let [init (init-fn live-graph opts)]
                                       (if (pred init) init base))))
                        :sources [sig]
-                       :msg-fn  (fn [_ [msg]]
+                       :msg-fn  (fn [_event _prev [msg]]
                                   (when (and (impl/fresh? msg)
                                              (pred (impl/value msg)))
                                     (impl/fresh (impl/value msg))))})))

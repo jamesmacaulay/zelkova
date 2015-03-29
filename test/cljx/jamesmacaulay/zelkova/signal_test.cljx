@@ -459,19 +459,6 @@
       (is (= [1 2 3 4]
              (<! (async/into [] out)))))))
 
-(deftest-async test-events-are-timestamped-and-messages-have-references-to-their-origin-events
-  (go
-    (let [number-event (impl/make-event :numbers 1)
-          in (z/input 0 :numbers)
-          graph (z/spawn in)
-          out-messages (async/tap graph (chan))]
-      (async/onto-chan graph [number-event])
-      (let [[msg] (<! out-messages)]
-        (is (= number-event
-               (-> msg
-                   (impl/origin-event)
-                   (impl/record-timestamp nil))))))))
-
 (deftest-async test-splice
   (go
     (let [ch (async/chan)
