@@ -110,10 +110,10 @@ therefore acts as the seed accumulator."
   [f base source]
   (impl/make-signal {:init-fn (constantly base)
                      :sources [source]
-                     :msg-fn (fn [_event acc [message]]
+                     :msg-fn (fn [_event prev [message]]
                                (when (impl/fresh? message)
                                  (impl/fresh (f (impl/value message)
-                                                  (impl/value acc)))))}))
+                                                (impl/value prev)))))}))
 
 (defn drop-repeats
   "Returns a signal which relays values of `sig`, but drops repeated equal values."
@@ -135,7 +135,7 @@ calling `f` with no arguments.
   ([f source] (reducep f (f) source))
   ([f init source]
    (->> source
-        (foldp (fn [val acc] (f acc val)) init)
+        (foldp (fn [val prev] (f prev val)) init)
         drop-repeats)))
 
 (defn transducep
