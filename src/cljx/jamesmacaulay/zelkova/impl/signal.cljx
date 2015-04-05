@@ -254,7 +254,7 @@
                                            prev)
                                (into [] (comp (drop 1) cat)))]
         (if (empty? output-series)
-          [(cached (value prev))]
+          [(cached prev)]
           output-series)))))
 
 ; wiring up channels:
@@ -274,13 +274,13 @@
 (defn- spawn-message-loop!
   [init msg-fn c-in c-out]
   (let [wrapped-msg-fn (wrap-msg-fn msg-fn)]
-    (go-loop [prev (fresh init)]
+    (go-loop [prev init]
       (let [in-val (async/<! c-in)]
         (if (nil? in-val)
           (async/close! c-out)
           (let [out-val (wrapped-msg-fn prev in-val)]
             (>! c-out out-val)
-            (recur (last out-val))))))))
+            (recur (value (last out-val)))))))))
 
 (defn- build-message-mult
   [mult-map {:keys [init-fn sources msg-fn]} live-graph opts]

@@ -110,20 +110,19 @@ therefore acts as the seed accumulator."
   [f base source]
   (impl/make-signal {:init-fn (constantly base)
                      :sources [source]
-                     :msg-fn (fn [_event prev [message]]
-                               (when (impl/fresh? message)
-                                 (impl/fresh (f (impl/value message)
-                                                (impl/value prev)))))}))
+                     :msg-fn  (fn [_event prev [message]]
+                                (when (impl/fresh? message)
+                                  (impl/fresh (f (impl/value message) prev))))}))
 
 (defn drop-repeats
   "Returns a signal which relays values of `sig`, but drops repeated equal values."
   [sig]
   (impl/make-signal {:init-fn (:init-fn sig)
                      :sources [sig]
-                     :msg-fn (fn [_event prev [msg]]
-                               (when (and (impl/fresh? msg)
-                                          (not= (impl/value msg) (impl/value prev)))
-                                 msg))}))
+                     :msg-fn  (fn [_event prev [msg]]
+                                (when (and (impl/fresh? msg)
+                                           (not= (impl/value msg) prev))
+                                  msg))}))
 
 (defn reducep
   "Create a past-dependent signal like `foldp`, with a few differences:
