@@ -248,14 +248,15 @@
   (let [msg-fn (comp ensure-sequential msg-fn)]
     (fn [prev event-and-msg-batches]
       (let [input-series (-> event-and-msg-batches pad transpose)
-            output-series (->> input-series
-                               (reductions (fn [prev [event & msgs]]
-                                             (msg-fn event prev (vec msgs)))
-                                           prev)
-                               (into [] (comp (drop 1) cat)))]
-        (if (empty? output-series)
-          [(cached prev)]
-          output-series)))))
+            output-series (reduce (fn [acc [event & msgs]]
+                                    (let [prev (value (peek acc))
+                                          msgs (vec msgs)]
+                                      (into acc (msg-fn event prev msgs))))
+                                  [(cached prev)]
+                                  input-series)]
+        (if (= 1 (count output-series))
+          output-series
+          (subvec output-series 1))))))
 
 ; wiring up channels:
 

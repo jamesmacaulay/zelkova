@@ -424,6 +424,22 @@
       (is (= [3 5 7 9 11]
              (<! (async/into [] out)))))))
 
+(deftest-async test-pipeline-cat-gets-folded-correctly
+  (go
+    (let [ch (async/chan)
+          graph (->> ch
+                     (z/input [0] :number-vectors)
+                     (z/pipeline cat 0)
+                     (z/foldp + 0)
+                     (z/spawn))
+          out (async/tap graph (chan 1 impl/fresh-values))]
+      (async/onto-chan ch [[1 2 3]
+                           [4 5 6 7]
+                           [8 9]
+                           [10]])
+      (is (= [1 3 6 10 15 21 28 36 45 55]
+             (<! (async/into [] out)))))))
+
 (deftest test-pipeline-uses-last-message-in-batch-for-init
   (is (= 4 (->> (z/input [1 2 3 4] :number-vectors)
                 (z/pipeline cat 0)
