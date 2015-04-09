@@ -3,11 +3,11 @@
   :url "http://github.com/jamesmacaulay/zelkova"
   :license {:name "MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[org.clojure/clojure "1.7.0-alpha5"]
-                 [org.clojure/clojurescript "0.0-3126"]
+  :dependencies [[org.clojure/clojure "1.7.0-alpha6"]
+                 [org.clojure/clojurescript "0.0-3178"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
-  :plugins [[lein-cljsbuild "1.0.4"]
-            [com.keminglabs/cljx "0.5.0" :exclusions [org.clojure/clojure
+  :plugins [[lein-cljsbuild "1.0.5"]
+            [com.keminglabs/cljx "0.6.0" :exclusions [org.clojure/clojure
                                                       com.cemerick/piggieback
                                                       net.cgrand/parsley]]
             [com.cemerick/clojurescript.test "0.3.3"]]
@@ -18,8 +18,8 @@
             "cljs-autotest" ["do" "cljx" ["cljsbuild" "auto" "test"]]
             "all-tests" ["do" "clean" ["clj-test"] ["cljs-test"]]}
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.10"]
-                                  [org.clojure/tools.nrepl "0.2.8"]
-                                  [com.cemerick/piggieback "0.1.5"]
+                                  [org.clojure/tools.nrepl "0.2.10"]
+                                  [com.cemerick/piggieback "0.2.0"]
                                   [net.cgrand/parsley "0.9.3" :exclusions [org.clojure/clojure]]]
                    :source-paths ["target/classes"]}
              :repl [:dev {:source-paths ["repl" "target/classes" "target/generated/test/clj" "target/generated/test/cljs"]
