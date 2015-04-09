@@ -1,6 +1,8 @@
-## 0.3.0
+## 0.3.1
 
-### Changes
+* fixed a bug that would throw an error if you tried to use a folding signal like `foldp` on a signal that emitted multiple values from a single event, e.g. a `pipeline` with an "expanding" transducer like `cat`
+
+## 0.3.0
 
 * `lift`/`liftseq` renamed to `map`/`mapseq`
 * `input` signal constructor now also accepts a channel or mult as its value source
