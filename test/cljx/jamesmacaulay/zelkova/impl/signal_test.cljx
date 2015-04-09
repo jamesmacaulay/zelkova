@@ -24,9 +24,9 @@
   (go
     (let [in1 (z/input 0 :in1)
           in2 (z/input 0 :in2)
-          sig (impl/make-signal {:init-fn (constantly :test-init)
-                                 :sources [in1 in2]
-                                 :msg-fn  (fn [& args] (impl/fresh args))})
+          sig (impl/make-signal {:init-fn   (constantly :test-init)
+                                 :sources   [in1 in2]
+                                 :msg-xform (map (fn [payload] (impl/fresh payload)))})
           live-graph (z/spawn sig)
           output (async/tap live-graph
                             (chan 1 impl/fresh-values))

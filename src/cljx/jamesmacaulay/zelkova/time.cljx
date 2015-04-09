@@ -70,12 +70,13 @@
   timestamp because they rely on the same underlying event (`mouse/position`)."
   [sig]
   (let [sig-init (:init-fn sig)]
-    (impl/make-signal {:init-fn (fn [live-graph opts]
-                                  [(t/now) (sig-init live-graph opts)])
-                       :sources [sig]
-                       :msg-fn (fn [event _prev [msg]]
-                                 (when (impl/fresh? msg)
-                                   (impl/fresh [(impl/timestamp event) (impl/value msg)])))})))
+    (impl/make-signal {:init-fn   (fn [live-graph opts]
+                                    [(t/now) (sig-init live-graph opts)])
+                       :sources   [sig]
+                       :msg-xform (comp (map (fn [[event _prev [msg]]]
+                                               (when (impl/fresh? msg)
+                                                 (impl/fresh [(impl/timestamp event) (impl/value msg)]))))
+                                        (remove nil?))})))
 
 #+cljs
 (defn delay

@@ -31,13 +31,19 @@ may take the following forms:
                         :relayed-event-topic topic
                         :event-sources {topic event-channel-fn}}))))
 
+(defn- take-nothing
+  [rf]
+  (fn
+    ([] (rf))
+    ([result] (rf result))
+    ([result _input] (ensure-reduced result))))
+
 (defn constant
   "Returns a constant signal of the given value."
   [x]
-  (let [cached (impl/cached x)]
-    (impl/make-signal {:init-fn (constantly x)
-                       :sources [:events]
-                       :msg-fn (constantly cached)})))
+  (impl/make-signal {:init-fn   (constantly x)
+                     :sources   [:events]
+                     :msg-xform take-nothing}))
 
 (defn pipeline
   "Takes a stateless transducer `xform`, a fallback value `base`, and a signal
@@ -49,23 +55,20 @@ initial value of `sig`, then the initial value of the new signal will be the
 _last_ of those emitted. Stateful transducers will give unexpected results and
 are not supported."
   [xform base sig]
-  (let [xform' (comp (core/map impl/value) xform (core/map impl/fresh))
-        msg-fn (fn [_event _prev [msg :as msg-in-seq]]
-                 (when (impl/fresh? msg)
-                   (sequence xform' msg-in-seq)))
-        init-fn (:init-fn sig)
-        init-fn' (fn [live-graph opts]
-                   (let [msg (->> (init-fn live-graph opts)
-                                  (impl/fresh)
-                                  (vector)
-                                  (msg-fn nil nil)
-                                  (last))]
-                     (if (nil? msg)
-                       base
-                       (impl/value msg))))]
-    (impl/make-signal {:init-fn init-fn'
+  (let [parent-init-fn (:init-fn sig)
+        init-fn (fn [live-graph opts]
+                  (let [vals (sequence xform [(parent-init-fn live-graph opts)])]
+                    (if (seq vals)
+                      (last vals)
+                      base)))
+        msg-xform (comp (core/map (fn [[_event _prev [msg]]] msg))
+                        (filter impl/fresh?)
+                        (core/map impl/value)
+                        xform
+                        (core/map impl/fresh))]
+    (impl/make-signal {:init-fn init-fn
                        :sources [sig]
-                       :msg-fn msg-fn})))
+                       :msg-xform msg-xform})))
 
 (defn mapseq
   "Takes a mapping function `f` and a sequence of signal `sources`, and returns a
@@ -74,16 +77,19 @@ signal of values obtained by applying `f` to the values from the source signals.
   (if (empty? sources)
     (constant (f))
     (let [sources (vec sources)
-          emit-message (fn [_event _prev messages]
-                         (when (some impl/fresh? messages)
-                           (impl/fresh (apply f (mapv impl/value messages)))))]
+          msg-xform (comp (core/map (fn [[_event _prev msgs]] msgs))
+                          (filter (fn [msgs] (some impl/fresh? msgs)))
+                          (core/map (fn [msgs]
+                                      (->> msgs
+                                           (core/map impl/value)
+                                           (apply f)
+                                           (impl/fresh)))))]
       (impl/make-signal {:init-fn (fn [live-graph opts]
                                     (->> sources
-                                         (mapv #(impl/fresh ((:init-fn %) live-graph opts)))
-                                         (emit-message nil nil)
-                                         impl/value))
+                                         (core/map (fn [sig] ((:init-fn sig) live-graph opts)))
+                                         (apply f)))
                          :sources sources
-                         :msg-fn emit-message}))))
+                         :msg-xform msg-xform}))))
 
 (defn map
   "Takes a mapping function `f` and any number of signal `sources`, and returns a
@@ -108,21 +114,23 @@ signal are obtained by calling `f` with two arguments: the current value of the
 \"accumulator\"). `init` provides the initial value of the new signal, and
 therefore acts as the seed accumulator."
   [f base source]
-  (impl/make-signal {:init-fn (constantly base)
-                     :sources [source]
-                     :msg-fn  (fn [_event prev [message]]
-                                (when (impl/fresh? message)
-                                  (impl/fresh (f (impl/value message) prev))))}))
+  (impl/make-signal {:init-fn   (constantly base)
+                     :sources   [source]
+                     :msg-xform (comp (filter (fn [[_event _prev [msg]]]
+                                                (impl/fresh? msg)))
+                                      (core/map (fn [[_event prev [msg]]]
+                                                  (impl/fresh (f (impl/value msg) prev)))))}))
 
 (defn drop-repeats
   "Returns a signal which relays values of `sig`, but drops repeated equal values."
   [sig]
-  (impl/make-signal {:init-fn (:init-fn sig)
-                     :sources [sig]
-                     :msg-fn  (fn [_event prev [msg]]
-                                (when (and (impl/fresh? msg)
-                                           (not= (impl/value msg) prev))
-                                  msg))}))
+  (impl/make-signal {:init-fn   (:init-fn sig)
+                     :sources   [sig]
+                     :msg-xform (comp (filter (fn [[_event prev [msg]]]
+                                                (and (impl/fresh? msg)
+                                                     (not= prev (impl/value msg)))))
+                                      (core/map (fn [[_event _prev [msg]]]
+                                                  msg)))}))
 
 (defn reducep
   "Create a past-dependent signal like `foldp`, with a few differences:
@@ -198,10 +206,11 @@ at the same time, the first (leftmost) signal in `sigs` will take precedence and
 the other values will be discarded. The initial value of the returned signal is
 equal to the initial value of the first source signal."
   [sigs]
-  (impl/make-signal {:init-fn (:init-fn (first sigs))
-                     :sources sigs
-                     :msg-fn (fn [_event _prev messages]
-                               (first (filter impl/fresh? messages)))}))
+  (impl/make-signal {:init-fn   (:init-fn (first sigs))
+                     :sources   sigs
+                     :msg-xform (comp (core/map (fn [[_event _prev msgs]]
+                                                  (first (filter impl/fresh? msgs))))
+                                      (remove nil?))}))
 
 (defn merge
   "Takes any number of source signals `sigs`, and returns a new signal which relays
@@ -223,11 +232,12 @@ value of the first source signal."
 fresh value. For example, `(sample-on mouse/clicks mouse/position)` returns a signal
 of click positions."
   [sampler-sig value-sig]
-  (impl/make-signal {:init-fn (:init-fn value-sig)
-                     :sources [sampler-sig value-sig]
-                     :msg-fn (fn [_event _prev [sampler-msg value-msg]]
-                               (when (impl/fresh? sampler-msg)
-                                 (impl/fresh (impl/value value-msg))))}))
+  (impl/make-signal {:init-fn   (:init-fn value-sig)
+                     :sources   [sampler-sig value-sig]
+                     :msg-xform (comp (core/map (fn [[_event _prev [sampler-msg value-msg]]]
+                                                  (when (impl/fresh? sampler-msg)
+                                                    (impl/fresh (impl/value value-msg)))))
+                                      (remove nil?))}))
 
 (defn count
   "Returns a signal whose values are the number of fresh values emitted so far from
@@ -246,6 +256,14 @@ a signal of how many times the `numbers` signal emitted an odd number."
          0
          sig))
 
+(defn- keep-if-msg-xform
+  [pred]
+  (comp (core/map (fn [[_event _prev [msg]]]
+                    (when (and (impl/fresh? msg)
+                               (pred (impl/value msg)))
+                      (impl/fresh (impl/value msg)))))
+        (remove nil?)))
+
 (defn keep-if
   "Returns a signal which relays values from `sig`, but discards any which don't match
 the given predicate function `pred`. If a `base` value is provided, it will be the
@@ -253,22 +271,16 @@ initial value of the returned signal if the initial value of `sig` does not matc
 predicate. If no `base` is provided then the returned signal will always have the
 same initial value as `sig`, even if it does not match the predicate."
   ([pred sig]
-    (impl/make-signal {:init-fn (:init-fn sig)
-                       :sources [sig]
-                       :msg-fn  (fn [_event _prev [msg]]
-                                  (when (and (impl/fresh? msg)
-                                             (pred (impl/value msg)))
-                                    (impl/fresh (impl/value msg))))}))
+    (impl/make-signal {:init-fn   (:init-fn sig)
+                       :sources   [sig]
+                       :msg-xform (keep-if-msg-xform pred)}))
   ([pred base sig]
-    (impl/make-signal {:init-fn (let [init-fn (:init-fn sig)]
-                                  (fn [live-graph opts]
-                                    (let [init (init-fn live-graph opts)]
-                                      (if (pred init) init base))))
-                       :sources [sig]
-                       :msg-fn  (fn [_event _prev [msg]]
-                                  (when (and (impl/fresh? msg)
-                                             (pred (impl/value msg)))
-                                    (impl/fresh (impl/value msg))))})))
+    (impl/make-signal {:init-fn   (let [init-fn (:init-fn sig)]
+                                    (fn [live-graph opts]
+                                      (let [init (init-fn live-graph opts)]
+                                        (if (pred init) init base))))
+                       :sources   [sig]
+                       :msg-xform (keep-if-msg-xform pred)})))
 
 (defn drop-if
   "Like `keep-if`, but drops values which match the predicate."

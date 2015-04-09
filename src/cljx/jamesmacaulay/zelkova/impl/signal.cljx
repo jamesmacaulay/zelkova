@@ -175,7 +175,7 @@
                                                delayed-topic-map))))
 
 (defrecord SignalDefinition
-  [init-fn sources relayed-event-topic msg-fn deps event-sources]
+  [init-fn sources relayed-event-topic msg-xform deps event-sources]
   SignalProtocol
   (input? [_] (some #{:events} sources))
   (signal-deps [_]
@@ -194,9 +194,10 @@
   (if-let [relayed-topic (:relayed-event-topic opts)]
     (assoc opts
       :sources [:events]
-      :msg-fn (fn [event _prev _msgs]
-                (when (= relayed-topic (topic event))
-                  (fresh (value event)))))
+      :msg-xform (comp (map (fn [[event _prev _msgs]]
+                              (when (= relayed-topic (topic event))
+                                (fresh (value event)))))
+                       (remove nil?)))
     opts))
 
 (defn make-signal
@@ -236,7 +237,7 @@
   [msg-batches]
   (apply map vector msg-batches))
 
-(defn- wrap-msg-fn
+(defn- wrap-msg-xform
   "Takes a signal's `msg-fn` and wraps it to provide various behaviours:
     * return values are turned into sequences with `ensure-sequential`
     * message batches from each signal are padded and transposed, and `msg-fn` is called
@@ -244,14 +245,15 @@
       of a separate event.
     * when `msg-fn` returns `nil` or an empty sequence, the previous value is returned as a
       cached value."
-  [msg-fn]
-  (let [msg-fn (comp ensure-sequential msg-fn)]
+  [msg-xform]
+  (let [msg-fn (fn [args] (sequence msg-xform [args]))]
     (fn [prev event-and-msg-batches]
       (let [input-series (-> event-and-msg-batches pad transpose)
             output-series (reduce (fn [acc [event & msgs]]
                                     (let [prev (value (peek acc))
-                                          msgs (vec msgs)]
-                                      (into acc (msg-fn event prev msgs))))
+                                          msgs (vec msgs)
+                                          new-msgs (msg-fn [event prev msgs])]
+                                      (into acc new-msgs)))
                                   [(cached prev)]
                                   input-series)]
         (if (= 1 (count output-series))
@@ -273,8 +275,8 @@
        (async/map vector)))
 
 (defn- spawn-message-loop!
-  [init msg-fn c-in c-out]
-  (let [wrapped-msg-fn (wrap-msg-fn msg-fn)]
+  [init msg-xform c-in c-out]
+  (let [wrapped-msg-fn (wrap-msg-xform msg-xform)]
     (go-loop [prev init]
       (let [in-val (async/<! c-in)]
         (if (nil? in-val)
@@ -284,10 +286,10 @@
             (recur (value (last out-val)))))))))
 
 (defn- build-message-mult
-  [mult-map {:keys [init-fn sources msg-fn]} live-graph opts]
+  [mult-map {:keys [init-fn sources msg-xform]} live-graph opts]
   (let [c-in (tap-signals mult-map sources)
         c-out (async/chan)]
-    (spawn-message-loop! (init-fn live-graph opts) msg-fn c-in c-out)
+    (spawn-message-loop! (init-fn live-graph opts) msg-xform c-in c-out)
     (async/mult c-out)))
 
 (defn build-message-mult-map
