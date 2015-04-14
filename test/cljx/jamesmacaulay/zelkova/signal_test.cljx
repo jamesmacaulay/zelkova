@@ -423,6 +423,28 @@
     (is (= {:a 1 :b 2}
            (impl/init (z/spawn tmpl))))))
 
+(deftest-async test-indexed-updates
+  (go
+    (let [in (z/write-port 0)
+          incrd-evens (->> in (z/map inc) (z/keep-if even?))
+          doubled-less-than-5 (->> in (z/map (partial * 2)) (z/keep-if (partial > 5)))
+          tripled-odds (->> in (z/map (partial * 3)) (z/keep-if odd?))
+          updates (z/indexed-updates {:incrd-evens         incrd-evens
+                                      :doubled-less-than-5 doubled-less-than-5
+                                      :tripled-odds        tripled-odds})
+          out (-> updates (z/spawn) (async/tap (chan)))]
+      (async/onto-chan in [1 2 3 4 5])
+      (is (= [{:incrd-evens         2
+               :doubled-less-than-5 2
+               :tripled-odds        3}
+              {:doubled-less-than-5 4}
+              {:incrd-evens  4
+               :tripled-odds 9}
+              ; no updates from 4
+              {:incrd-evens  6
+               :tripled-odds 15}]
+             (<! (async/into [] out)))))))
+
 (deftest-async test-pipeline-works-with-transducers
   (go
     (let [ch (async/chan)

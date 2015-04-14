@@ -122,6 +122,35 @@ value of each signal in place of the signal itself."
               (zipmap ks values))
             (vals signal-map))))
 
+(defn indexed-updates
+  "Takes a map whose values are signals, to be used as a template. Returns a new
+signal whose values are maps that include an entry for every signal in
+`signal-map` with a fresh value. For example, assuming that `signal-map` is:
+
+    {:a sig-a
+     :b sig-b
+     :c sig-c}
+
+Then when `sig-a` has a fresh value of \"foo\", `sig-b`'s value is cached, and
+`sig-c` has a fresh value of \"bar\", then the `indexed-updates` signal would
+emit `{:a \"foo\" :c \"bar\"}. When none of the signals have fresh values, no
+value is emitted from the `indexed-updates` signal. This means that this signal
+never emits an empty map."
+  [signal-map]
+  (let [ks (keys signal-map)
+        vs (vals signal-map)
+        init-fn (fn [live-graph opts]
+                  (zipmap ks (core/map (fn [s] ((:init-fn s) live-graph opts)) vs)))
+        kv-xform (comp (filter (fn [[k msg]] (impl/fresh? msg)))
+                       (core/map (fn [[k msg]] [k (impl/value msg)])))
+        msg-xform (comp (core/map (fn [[_event _prev msgs]]
+                                    (into {} kv-xform (core/map vector ks msgs))))
+                        (remove empty?)
+                        (core/map impl/fresh))]
+    (impl/make-signal {:init-fn   init-fn
+                       :sources   vs
+                       :msg-xform msg-xform})))
+
 (defn foldp
   "Create a past-dependent signal (\"fold into the past\"). The values of a `foldp`
 signal are obtained by calling `f` with two arguments: the current value of the
