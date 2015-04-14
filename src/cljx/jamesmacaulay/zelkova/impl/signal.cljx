@@ -174,8 +174,19 @@
                                                delayed-kid-indexes-map
                                                delayed-topic-map))))
 
+(defn- delegate-to-channel
+  [f ch & args]
+  (assert (not (nil? ch))
+          "This signal is not a valid write-port, use the `jamesmacaulay.zelkova.signal/write-port` constructor if you want to treat this signal like a channel.")
+  (apply f ch args))
+
 (defrecord SignalDefinition
-  [init-fn sources relayed-event-topic msg-xform deps event-sources]
+  [init-fn sources relayed-event-topic msg-xform deps event-sources write-port-channel]
+  async-impl/WritePort
+  (put! [_ val fn1-handler] (delegate-to-channel async-impl/put! write-port-channel val fn1-handler))
+  async-impl/Channel
+  (close! [_] (delegate-to-channel async-impl/close! write-port-channel))
+  (closed? [_] (delegate-to-channel async-impl/closed? write-port-channel))
   SignalProtocol
   (input? [_] (some #{:events} sources))
   (signal-deps [_]

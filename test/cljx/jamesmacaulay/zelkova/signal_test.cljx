@@ -104,6 +104,23 @@
       (is (= [[1 :a] [1 :b] [2 :b] [2 :c]]
              (<! (async/into [] output)))))))
 
+(deftest-async test-write-port-broadcasts-to-all-dependent-live-graphs
+  (go
+    (let [numbers-input (z/write-port 0)
+          output1 (-> numbers-input
+                      (z/spawn)
+                      (async/tap (chan 1 impl/fresh-values)))
+          output2 (-> numbers-input
+                      (z/spawn)
+                      (async/tap (chan 1 impl/fresh-values)))
+          incremented-output (-> (z/map inc numbers-input)
+                                 (z/spawn)
+                                 (async/tap (chan 1 impl/fresh-values)))]
+      (async/onto-chan numbers-input [1 2 3 4])
+      (is (= [1 2 3 4] (<! (async/into [] output1))))
+      (is (= [1 2 3 4] (<! (async/into [] output2))))
+      (is (= [2 3 4 5] (<! (async/into [] incremented-output)))))))
+
 (deftest-async test-io
   (go
     (let [number (event-constructor :numbers)
