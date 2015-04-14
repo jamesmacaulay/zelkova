@@ -322,7 +322,7 @@
   (init [g]))
 
 (defrecord LiveChannelGraph
-  [definition events-channel mult-map opts]
+  [definition events-channel mult-map output-values-mult opts]
   LiveChannelGraphProtocol
   (output-mult [_] (get mult-map definition))
   (signal-mult [_ sig] (get mult-map sig))
@@ -339,9 +339,9 @@
   async-impl/WritePort
   (put! [_ val fn1] (async-impl/put! events-channel val fn1))
   async/Mult
-  (tap* [g ch close?] (async/tap* (output-mult g) ch close?))
-  (untap* [g ch] (async/untap* (output-mult g) ch))
-  (untap-all* [g] (async/untap-all* (output-mult g))))
+  (tap* [g ch close?] (async/tap* output-values-mult ch close?))
+  (untap* [g ch] (async/untap* output-values-mult ch))
+  (untap-all* [g] (async/untap-all* output-values-mult)))
 
 (defprotocol SignalLike
   (spawn* [x opts])
@@ -362,15 +362,18 @@
     (tools/do-effects (if (seq ks)
                         (partial swap! atm assoc-in ks)
                         (partial reset! atm))
-                      (async/tap g (async/chan 1 fresh-values)))
+                      (async/tap g (async/chan)))
     atm)
   SignalDefinition
   (spawn* [s opts]
     (let [events-channel (async/chan 1 events-xform)
           events-mult (async/mult events-channel)
-          mult-map (build-message-mult-map (topsort s) events-mult s opts)]
+          mult-map (build-message-mult-map (topsort s) events-mult s opts)
+          output-values-mult (-> (get mult-map s)
+                                 (async/tap (async/chan 1 fresh-values))
+                                 (async/mult))]
       (-> s
-          (->LiveChannelGraph events-channel mult-map opts)
+          (->LiveChannelGraph events-channel mult-map output-values-mult opts)
           (connect-to-world))))
   (pipe-to-atom* [s atm ks]
     (pipe-to-atom* (spawn* s nil) atm ks)))

@@ -1,3 +1,8 @@
+## 0.3.2
+
+* calling core.async's `tap` function on a live graph created with `spawn` now supplies you with straight fresh values from the output signal, instead of batches of fresh & cached messages
+  - this means that values of an output signal can never be `nil`, since core.async channels don't do `nil`s
+
 ## 0.3.1
 
 * fixed a bug that would throw an error if you tried to use a folding signal like `foldp` on a signal that emitted multiple values from a single event, e.g. a `pipeline` with an "expanding" transducer like `cat`

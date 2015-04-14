@@ -28,8 +28,7 @@
                                  :sources   [in1 in2]
                                  :msg-xform (map (fn [payload] (impl/fresh payload)))})
           live-graph (z/spawn sig)
-          output (async/tap live-graph
-                            (chan 1 impl/fresh-values))
+          output (async/tap live-graph (chan))
           event1 (impl/->Event :in1 1 101)
           event2 (impl/->Event :in2 2 102)
           expected1 [event1
