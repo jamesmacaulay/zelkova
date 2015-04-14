@@ -353,6 +353,12 @@
                           event)))
              ensure-sequential)))
 
+(defn- build-output-values-mult
+  [mult-map output-sig]
+  (-> (get mult-map output-sig)
+      (async/tap (async/chan 1 fresh-values))
+      (async/mult)))
+
 (extend-protocol SignalLike
   LiveChannelGraph
   (spawn* [g opts] (spawn* (:signal g) opts))
@@ -367,9 +373,7 @@
     (let [events-channel (async/chan 1 events-xform)
           events-mult (async/mult events-channel)
           mult-map (build-message-mult-map (topsort s) events-mult s opts)
-          output-values-mult (-> (get mult-map s)
-                                 (async/tap (async/chan 1 fresh-values))
-                                 (async/mult))]
+          output-values-mult (build-output-values-mult mult-map s)]
       (-> s
           (->LiveChannelGraph events-channel mult-map output-values-mult opts)
           (connect-to-world))))
