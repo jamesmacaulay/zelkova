@@ -28,7 +28,7 @@
   (let [shift-clicks (z/keep-when keyboard/shift mouse/clicks)]
     (->> mouse/position
          (z/sample-on shift-clicks)
-         (z/reducep conj #{}))))
+         (z/reductions conj #{}))))
 
 (def saved-points-atom
   (z/pipe-to-atom saved-points-signal))

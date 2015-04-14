@@ -168,6 +168,24 @@
       (is (= [1 3 6]
              (<! (async/into [] out)))))))
 
+(deftest-async test-reductions-can-get-init-value-from-calling-function-with-zero-args
+  (go
+    (let [in (z/write-port 0)
+          vectors (z/reductions conj in)
+          out (-> vectors (z/spawn) (async/tap (chan)))]
+      (async/onto-chan in [1 2 3])
+      (is (= [[1] [1 2] [1 2 3]]
+             (<! (async/into [] out)))))))
+
+(deftest-async test-reductions-with-init-value
+  (go
+    (let [in (z/write-port nil)
+          vectors (z/reductions conj {} in)
+          out (-> vectors (z/spawn) (async/tap (chan)))]
+      (async/onto-chan in [[:a 1] [:b 2] [:c 3]])
+      (is (= [{:a 1} {:a 1 :b 2} {:a 1 :b 2 :c 3}]
+             (<! (async/into [] out)))))))
+
 (deftest-async test-regular-signals-are-synchronous
   (go
     (let [number (event-constructor :numbers)
@@ -252,22 +270,6 @@
                         (pos [50 50])
                         click])
       (is (= [[10 10] [30 30] [50 50]]
-             (<! (async/into [] out)))))))
-
-(deftest-async test-transducep
-  (go
-    (let [number (event-constructor :numbers)
-          in (z/input 10 :numbers)
-          odd-increments (z/transducep (comp (map inc)
-                                                   (filter odd?))
-                                             conj
-                                             in)
-          graph (z/spawn odd-increments)
-          out (async/tap graph (chan))]
-      (is (= [] (impl/init graph)))
-      (async/onto-chan graph (map number [20 21 22 23]))
-      (is (= [[21]
-              [21 23]]
              (<! (async/into [] out)))))))
 
 (deftest-async test-count

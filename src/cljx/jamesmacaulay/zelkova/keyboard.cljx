@@ -72,7 +72,7 @@
 
 (def ^:private key-merge
   (->> (z/merge down-events up-events blur-events)
-       (z/reducep event-action empty-state)))
+       (z/reductions event-action empty-state)))
 
 (defn- key-signal
   [f]

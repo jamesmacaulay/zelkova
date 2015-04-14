@@ -1,6 +1,6 @@
 (ns jamesmacaulay.zelkova.signal
   "This is Zelkova's core namespace."
-  (:refer-clojure :exclude [map merge count])
+  (:refer-clojure :exclude [map merge count reductions])
   #+clj
   (:require [clojure.core :as core]
             [clojure.core.async :as async :refer [go go-loop <! >!]]
@@ -147,24 +147,17 @@ therefore acts as the seed accumulator."
                                       (core/map (fn [[_event _prev [msg]]]
                                                   msg)))}))
 
-(defn reducep
-  "Create a past-dependent signal like `foldp`, with a few differences:
-* calls `f` with the arguments reversed to align with Clojure's `reduce`:
-the first argument is the accumulator, the second is the current value of `source`.
+(defn reductions
+  "Create a past-dependent signal like `foldp`, with two differences:
+* calls `f` with the arguments reversed to align with Clojure: the first
+argument is the accumulator, the second is the current value of `source`.
 * if `init` is omitted, the initial value of the new signal will be obtained by
-calling `f` with no arguments.
-* successive equal values of the returned signal are dropped with `drop-repeats`"
-  ([f source] (reducep f (f) source))
+calling `f` with no arguments."
+  ([f source] (reductions f (f) source))
   ([f init source]
-   (->> source
-        (foldp (fn [val prev] (f prev val)) init)
-        drop-repeats)))
-
-(defn transducep
-  "Like `reducep`, but transforms the reducing function `f` with transducer `xform`."
-  ([xform f source] (reducep (xform f) (f) source))
-  ([xform f init source]
-   (reducep (xform f) init source)))
+   (foldp (fn [val prev] (f prev val))
+          init
+          source)))
 
 (defn async
   "Returns an \"asynchronous\" version of `source`, splitting off a new subgraph which
