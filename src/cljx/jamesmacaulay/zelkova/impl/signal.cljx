@@ -316,7 +316,6 @@
   (into {} (map :event-sources) sorted-signals))
 
 (defprotocol LiveChannelGraphProtocol
-  (output-mult [g])
   (signal-mult [g sig])
   (connect-to-world [g])
   (init [g]))
@@ -324,7 +323,6 @@
 (defrecord LiveChannelGraph
   [definition events-channel mult-map output-values-mult opts]
   LiveChannelGraphProtocol
-  (output-mult [_] (get mult-map definition))
   (signal-mult [_ sig] (get mult-map sig))
   (connect-to-world [g]
     (let [world (gather-event-sources (topsort definition))]

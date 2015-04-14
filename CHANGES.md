@@ -1,5 +1,6 @@
 ## 0.3.2
 
+* got rid of `j.z.i.signal/output-mult`
 * calling core.async's `tap` function on a live graph created with `spawn` now supplies you with straight fresh values from the output signal, instead of batches of fresh & cached messages
   - this means that values of an output signal can never be `nil`, since core.async channels don't do `nil`s
 
