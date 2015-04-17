@@ -85,6 +85,16 @@
       async {:some-topic [input]
              (:relayed-event-topic async) [async]})))
 
+(deftest-async test-to-chan
+  (go
+    (let [in (z/write-port 0)
+          incrd (z/map inc in)
+          raw-out (z/to-chan incrd)
+          filtered-out (z/to-chan incrd 1 (filter odd?))]
+      (async/onto-chan in [1 2 3 4])
+      (is (= [2 3 4 5] (<! (async/into [] raw-out))))
+      (is (= [3 5] (<! (async/into [] filtered-out)))))))
+
 
 (deftest-async test-wiring-things-up
   (go
@@ -106,15 +116,11 @@
 (deftest-async test-write-port-broadcasts-to-all-dependent-live-graphs
   (go
     (let [numbers-input (z/write-port 0)
-          output1 (-> numbers-input
-                      (z/spawn)
-                      (async/tap (chan)))
-          output2 (-> numbers-input
-                      (z/spawn)
-                      (async/tap (chan)))
-          incremented-output (-> (z/map inc numbers-input)
-                                 (z/spawn)
-                                 (async/tap (chan)))]
+          output1 (z/to-chan numbers-input)
+          output2 (z/to-chan numbers-input)
+          incremented-output (->> numbers-input
+                                  (z/map inc)
+                                  (z/to-chan))]
       (async/onto-chan numbers-input [1 2 3 4])
       (is (= [1 2 3 4] (<! (async/into [] output1))))
       (is (= [1 2 3 4] (<! (async/into [] output2))))
@@ -172,7 +178,7 @@
   (go
     (let [in (z/write-port 0)
           vectors (z/reductions conj in)
-          out (-> vectors (z/spawn) (async/tap (chan)))]
+          out (z/to-chan vectors)]
       (async/onto-chan in [1 2 3])
       (is (= [[1] [1 2] [1 2 3]]
              (<! (async/into [] out)))))))
@@ -181,7 +187,7 @@
   (go
     (let [in (z/write-port nil)
           vectors (z/reductions conj {} in)
-          out (-> vectors (z/spawn) (async/tap (chan)))]
+          out (z/to-chan vectors)]
       (async/onto-chan in [[:a 1] [:b 2] [:c 3]])
       (is (= [{:a 1} {:a 1 :b 2} {:a 1 :b 2 :c 3}]
              (<! (async/into [] out)))))))
@@ -372,8 +378,7 @@
                                        [20 20]
                                        [30 30]])
           mouse-position (z/input [0 0] :mouse-position (constantly value-source))
-          graph (z/spawn mouse-position)
-          out (async/tap graph (chan))]
+          out (z/to-chan mouse-position)]
       (is (= [[10 10] [20 20] [30 30]]
              (<! (async/into [] out)))))))
 
@@ -381,8 +386,7 @@
   (go
     (let [value-source (async/chan)
           numbers (z/input 0 :numbers (async/mult value-source))
-          graph (z/spawn numbers)
-          out (async/tap graph (chan))]
+          out (z/to-chan numbers)]
       (async/onto-chan value-source [1 2 3])
       (is (= [1 2 3]
              (<! (async/into [] out)))))))
@@ -391,8 +395,7 @@
   (go
     (let [value-source (async/chan)
           numbers (z/input 0 :numbers value-source)
-          graph (z/spawn numbers)
-          out (async/tap graph (chan))]
+          out (z/to-chan numbers)]
       (async/onto-chan value-source [1 2 3])
       (is (= [1 2 3]
              (<! (async/into [] out)))))))
@@ -432,7 +435,7 @@
           updates (z/indexed-updates {:incrd-evens         incrd-evens
                                       :doubled-less-than-5 doubled-less-than-5
                                       :tripled-odds        tripled-odds})
-          out (-> updates (z/spawn) (async/tap (chan)))]
+          out (z/to-chan updates)]
       (async/onto-chan in [1 2 3 4 5])
       (is (= [{:incrd-evens         2
                :doubled-less-than-5 2
@@ -458,7 +461,7 @@
                                  incrd-evens (keyword-handler :incrd-evens)
                                  doubled-less-than-5 (keyword-handler :doubled-less-than-5)
                                  tripled-odds (keyword-handler :tripled-odds))
-          out (-> stepper (z/spawn) (async/tap (chan)))]
+          out (z/to-chan stepper)]
       (async/onto-chan in [1 2 3 4 5])
       (is (= [{:incrd-evens         [2]
                :doubled-less-than-5 [2]

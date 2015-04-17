@@ -412,3 +412,9 @@ with a sequence of keys `ks`, then fresh values will be inserted into the atom's
                          :meta {::source live-graph}))))
   ([x atm] (impl/pipe-to-atom* x atm nil))
   ([x atm ks] (impl/pipe-to-atom* x atm ks)))
+
+(defn to-chan
+  "Takes a signal `s` and returns a channel of fresh values, passing any extra `args` to
+the `chan` constructor."
+  [s & args]
+  (-> (spawn s) (async/tap (apply async/chan args))))
