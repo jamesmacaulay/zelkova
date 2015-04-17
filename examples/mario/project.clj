@@ -7,7 +7,7 @@
   :dependencies [[org.clojure/clojure "1.7.0-beta1"]
                  [org.clojure/clojurescript "0.0-3196"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-                 [jamesmacaulay/zelkova "0.3.2-SNAPSHOT"]
+                 [jamesmacaulay/zelkova "0.4.0-SNAPSHOT"]
                  [figwheel "0.2.5-SNAPSHOT"]
                  [sablono "0.3.4"]
                  [org.omcljs/om "0.8.8"]]

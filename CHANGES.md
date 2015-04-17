@@ -1,4 +1,4 @@
-## 0.3.2
+## 0.4.0
 
 * added `to-chan`
 * added `select-step`, like `reductions` but with multiple source signals that each get their own reducing function 
