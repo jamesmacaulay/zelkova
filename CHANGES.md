@@ -1,5 +1,6 @@
 ## 0.3.2
 
+* flipped argument order of the `setup!` function passed to `splice` 
 * added `indexed-updates`, a signal transformer useful for performing different effects based on which source signal has updated
 * added `reductions` function, which works like `reducep` but has a better name and doesn't do an implicit `drop-repeats`
 * removed `reducep` and `transducep`

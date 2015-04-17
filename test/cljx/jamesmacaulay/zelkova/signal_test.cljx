@@ -520,7 +520,7 @@
     (let [ch (async/chan)
           graph (->> ch
                      (z/input 0 :numbers)
-                     (z/splice (fn [to from]
+                     (z/splice (fn [from to]
                                  (async/pipeline-async 1
                                                        to
                                                        (fn [v ch]
