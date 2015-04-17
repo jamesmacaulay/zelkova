@@ -188,6 +188,26 @@ calling `f` with no arguments."
           init
           source)))
 
+(defn select-step
+  "Takes an initial value and a map whose keys are signals and whose values are
+reducing functions. Returns a past-dependent signal like `reductions`, except
+each signal has its own reducing function to use when that signal updates. If
+more than one source signal updates from the same input event, then each
+applicable reducing function is called to transform the state value in the
+same order as they are defined in `signal-handlers-map`."
+  [init & signals-and-handlers]
+  (let [[signals handlers] (reduce (partial mapv conj)
+                                   [[] []]
+                                   (partition 2 signals-and-handlers))
+        signal->handler (zipmap signals handlers)
+        updates-signal (indexed-updates (zipmap signals signals))
+        f (fn [prev updates-by-signal]
+            (reduce (fn [acc [sig val]]
+                      ((signal->handler sig) acc val))
+                    prev
+                    updates-by-signal))]
+    (reductions f init updates-signal)))
+
 (defn async
   "Returns an \"asynchronous\" version of `source`, splitting off a new subgraph which
 does not maintain consistent event ordering relative to the main graph. In exchange,

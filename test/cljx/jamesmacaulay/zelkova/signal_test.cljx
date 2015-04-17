@@ -445,6 +445,36 @@
                :tripled-odds 15}]
              (<! (async/into [] out)))))))
 
+(deftest-async test-select-step
+  (go
+    (let [in (z/write-port 0)
+          incrd-evens (->> in (z/map inc) (z/keep-if even?))
+          doubled-less-than-5 (->> in (z/map (partial * 2)) (z/keep-if (partial > 5)))
+          tripled-odds (->> in (z/map (partial * 3)) (z/keep-if odd?))
+          keyword-handler (fn [k]
+                            (fn [state n]
+                              (merge-with concat state {k [n]})))
+          stepper (z/select-step {}
+                                 incrd-evens (keyword-handler :incrd-evens)
+                                 doubled-less-than-5 (keyword-handler :doubled-less-than-5)
+                                 tripled-odds (keyword-handler :tripled-odds))
+          out (-> stepper (z/spawn) (async/tap (chan)))]
+      (async/onto-chan in [1 2 3 4 5])
+      (is (= [{:incrd-evens         [2]
+               :doubled-less-than-5 [2]
+               :tripled-odds        [3]}
+              {:incrd-evens         [2]
+               :doubled-less-than-5 [2 4]
+               :tripled-odds        [3]}
+              {:incrd-evens         [2 4]
+               :doubled-less-than-5 [2 4]
+               :tripled-odds        [3 9]}
+              ; no updates from 4
+              {:incrd-evens         [2 4 6]
+               :doubled-less-than-5 [2 4]
+               :tripled-odds        [3 9 15]}]
+             (<! (async/into [] out)))))))
+
 (deftest-async test-pipeline-works-with-transducers
   (go
     (let [ch (async/chan)
