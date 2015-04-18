@@ -82,7 +82,7 @@
 (defn delay
   "Delay a signal by `ms` milliseconds."
   [ms sig]
-  (z/splice (fn [to from]
+  (z/splice (fn [from to]
               (let [waiting (async/chan (+ 1000 ms))
                     fire! #(async/take! waiting (partial async/put! to))]
                 (go-loop []
