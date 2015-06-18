@@ -1,18 +1,16 @@
 (ns jamesmacaulay.zelkova.time
   "Functions for working with time."
   (:refer-clojure :exclude [second delay])
-  #+clj
-  (:require [jamesmacaulay.zelkova.impl.time :as t]
-            [jamesmacaulay.zelkova.signal :as z]
-            [jamesmacaulay.zelkova.impl.signal :as impl]
-            [clojure.core.async :as async :refer [>! <! go go-loop]])
-  #+cljs
-  (:require [jamesmacaulay.zelkova.impl.time :as t]
-            [jamesmacaulay.zelkova.signal :as z]
-            [jamesmacaulay.zelkova.impl.signal :as impl]
-            [cljs.core.async :as async :refer [>! <!]])
-  #+cljs
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
+  #?(:cljs (:require [jamesmacaulay.zelkova.impl.time :as t]
+                     [jamesmacaulay.zelkova.signal :as z]
+                     [jamesmacaulay.zelkova.impl.signal :as impl]
+                     [cljs.core.async :as async :refer [>! <!]])
+
+    :clj (:require [jamesmacaulay.zelkova.impl.time :as t]
+                   [jamesmacaulay.zelkova.signal :as z]
+                   [jamesmacaulay.zelkova.impl.signal :as impl]
+                   [clojure.core.async :as async :refer [>! <! go go-loop]]))
+  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
 
 (def millisecond 1)
 (def second 1000)
@@ -78,40 +76,40 @@
                                                  (impl/fresh [(impl/timestamp event) (impl/value msg)]))))
                                         (remove nil?))})))
 
-#+cljs
-(defn delay
-  "Delay a signal by `ms` milliseconds."
-  [ms sig]
-  (z/splice (fn [from to]
-              (let [waiting (async/chan (+ 1000 ms))
-                    fire! #(async/take! waiting (partial async/put! to))]
-                (go-loop []
-                  (let [v (<! from)]
-                    (if (nil? v)
-                      (async/close! to)
-                      (do
-                        (>! waiting v)
-                        (js/setTimeout fire! ms)
-                        (recur)))))))
-            (:init-fn sig)
-            sig))
+#?(:cljs
+   (defn delay
+     "Delay a signal by `ms` milliseconds."
+     [ms sig]
+     (z/splice (fn [from to]
+                 (let [waiting (async/chan (+ 1000 ms))
+                       fire! #(async/take! waiting (partial async/put! to))]
+                   (go-loop []
+                     (let [v (<! from)]
+                       (if (nil? v)
+                         (async/close! to)
+                         (do
+                           (>! waiting v)
+                           (js/setTimeout fire! ms)
+                           (recur)))))))
+       (:init-fn sig)
+       sig)))
 
-#+cljs
-(defn since
-  "Returns a signal of boolean values: true when `sig` has updated in the past
+#?(:cljs
+   (defn since
+     "Returns a signal of boolean values: true when `sig` has updated in the past
   `ms` milliseconds, false otherwise."
-  [ms sig]
-  (let [start (z/map (constantly 1) sig)
-        stop (z/map (constantly -1) (delay ms sig))
-        delaydiff (z/foldp + 0 (z/merge start stop))]
-    (z/map (complement zero?) delaydiff)))
+     [ms sig]
+     (let [start (z/map (constantly 1) sig)
+           stop (z/map (constantly -1) (delay ms sig))
+           delaydiff (z/foldp + 0 (z/merge start stop))]
+       (z/map (complement zero?) delaydiff))))
 
-#+cljs
-(defn debounce
-  "Returns a signal which relays the latest value from `sig` only after `ms`
+#?(:cljs
+   (defn debounce
+     "Returns a signal which relays the latest value from `sig` only after `ms`
   milliseconds have passed since `sig` last updated. Useful when you want to
   wait until a user stops typing before doing something with the text, for
   example."
-  [ms sig]
-  (let [timeouts (->> sig (since ms) (z/keep-if not false))]
-    (->> sig (z/sample-on timeouts))))
+     [ms sig]
+     (let [timeouts (->> sig (since ms) (z/keep-if not false))]
+       (->> sig (z/sample-on timeouts)))))
