@@ -8,14 +8,17 @@
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]]
   :plugins [[lein-cljsbuild "1.0.5"]
             [com.cemerick/clojurescript.test "0.3.3"]]
-  :aliases {"cljs-test" ["cljsbuild" "test"]
+  :aliases {"repl" ["with-profile" "repl" "repl"]
+            "cljs-test" ["cljsbuild" "test"]
             "cljs-autotest" ["cljsbuild" "auto" "test"]
             "all-tests" ["do" "clean" ["test"] ["cljs-test"]]}
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.10"]
                                   [org.clojure/tools.nrepl "0.2.10"]
                                   [com.cemerick/piggieback "0.2.0"]
                                   [net.cgrand/parsley "0.9.3" :exclusions [org.clojure/clojure]]]
-                   :source-paths ["src"]}}
+                   :source-paths ["src" "test"]}
+             :repl [:dev {:source-paths ["src" "test" "repl"]
+                          :test-paths ["test"]}]}
   :prep-tasks ["javac" "compile"]
   :cljsbuild {:test-commands {"phantom" ["phantomjs" :runner "target/testable.js"]
                               "node" ["node" :node-runner "target/testable.js"]}
