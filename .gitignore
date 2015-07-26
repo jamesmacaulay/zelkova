@@ -10,5 +10,6 @@ pom.xml.asc
 .nrepl-history
 /.repl/*
 /out/*
+/doc
 *.iml
 examples/*/checkouts
