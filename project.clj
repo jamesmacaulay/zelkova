@@ -10,7 +10,9 @@
             [com.cemerick/clojurescript.test "0.3.3"]
             [funcool/codeina "0.3.0-SNAPSHOT"]]
 
-  :codeina {:source ["src"]
+  :codeina {:sources ["src/jamesmacaulay/zelkova"]
+            :exclude [jamesmacaulay.zelkova.impl.signal
+                      jamesmacaulay.zelkova.impl.time]
             :reader :clojurescript
             :src-uri "http://github.com/jamesmacaulay/zelkova/blob/master/"
             :src-uri-prefix "#L"}
