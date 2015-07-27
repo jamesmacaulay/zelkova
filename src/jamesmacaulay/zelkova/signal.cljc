@@ -1,16 +1,15 @@
 (ns jamesmacaulay.zelkova.signal
   "This is Zelkova's core namespace."
-  (:refer-clojure :exclude [map merge count])
-  #+clj
-  (:require [clojure.core :as core]
-            [clojure.core.async :as async :refer [go go-loop <! >!]]
-            [jamesmacaulay.zelkova.impl.signal :as impl])
-  #+cljs
-  (:require [cljs.core :as core]
-    [cljs.core.async :as async :refer [<! >!]]
-    [jamesmacaulay.zelkova.impl.signal :as impl])
-  #+cljs
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
+  (:refer-clojure :exclude [map merge count reductions])
+  #?(:clj (:require [clojure.core :as core]
+                    [clojure.core.async :as async :refer [go go-loop <! >!]]
+                    [clojure.core.async.impl.protocols :as async-impl]
+                    [jamesmacaulay.zelkova.impl.signal :as impl])
+     :cljs (:require [cljs.core :as core]
+                     [cljs.core.async :as async :refer [<! >!]]
+                     [cljs.core.async.impl.protocols :as async-impl]
+                     [jamesmacaulay.zelkova.impl.signal :as impl]))
+  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
 
 (defn input
   "Returns an input signal with initial value `init`. The signal propagates values
@@ -23,21 +22,40 @@ may take the following forms:
 * a mult of some such value channel"
   ([init] (input init (keyword (gensym))))
   ([init topic]
-   (impl/make-signal {:init-fn (constantly init)
+   (impl/make-signal {:init-fn             (constantly init)
                       :relayed-event-topic topic}))
   ([init topic value-source]
-   (let [event-channel-fn (impl/value-source->events-fn value-source topic)]
-     (impl/make-signal {:init-fn (constantly init)
-                        :relayed-event-topic topic
-                        :event-sources {topic event-channel-fn}}))))
+   (impl/make-signal {:init-fn             (constantly init)
+                      :relayed-event-topic topic
+                      :event-sources       {topic (impl/value-source->events-fn value-source topic)}})))
+
+(defn write-port
+  "Takes an `init` value and an optional `topic`, and returns an input signal
+  which satisfies core.async's `WritePort` protocol. This allows you to put
+  values onto the signal as if it were a channel. If the `write-port` is being
+  used in multiple live graphs, each value put onto the `write-port` is
+  sent to all graphs."
+  ([init] (write-port init (keyword (gensym))))
+  ([init topic]
+    (let [write-port-channel (async/chan)]
+      (impl/make-signal {:init-fn             (constantly init)
+                         :relayed-event-topic topic
+                         :event-sources       {topic (impl/value-source->events-fn write-port-channel topic)}
+                         :write-port-channel  write-port-channel}))))
+
+(defn- take-nothing
+  [rf]
+  (fn
+    ([] (rf))
+    ([result] (rf result))
+    ([result _input] (ensure-reduced result))))
 
 (defn constant
   "Returns a constant signal of the given value."
   [x]
-  (let [cached (impl/cached x)]
-    (impl/make-signal {:init-fn (constantly x)
-                       :sources [:events]
-                       :msg-fn (constantly cached)})))
+  (impl/make-signal {:init-fn   (constantly x)
+                     :sources   [:events]
+                     :msg-xform take-nothing}))
 
 (defn pipeline
   "Takes a stateless transducer `xform`, a fallback value `base`, and a signal
@@ -49,23 +67,20 @@ initial value of `sig`, then the initial value of the new signal will be the
 _last_ of those emitted. Stateful transducers will give unexpected results and
 are not supported."
   [xform base sig]
-  (let [xform' (comp (core/map impl/value) xform (core/map impl/fresh))
-        msg-fn (fn [prev [msg :as msg-in-seq]]
-                 (when (impl/fresh? msg)
-                   (sequence xform' msg-in-seq)))
-        init-fn (:init-fn sig)
-        init-fn' (fn [live-graph opts]
-                   (let [msg (->> (init-fn live-graph opts)
-                                  (impl/fresh)
-                                  (vector)
-                                  (msg-fn nil)
-                                  (last))]
-                     (if (nil? msg)
-                       base
-                       (impl/value msg))))]
-    (impl/make-signal {:init-fn init-fn'
+  (let [parent-init-fn (:init-fn sig)
+        init-fn (fn [live-graph opts]
+                  (let [vals (sequence xform [(parent-init-fn live-graph opts)])]
+                    (if (seq vals)
+                      (last vals)
+                      base)))
+        msg-xform (comp (core/map (fn [[_event _prev [msg]]] msg))
+                        (filter impl/fresh?)
+                        (core/map impl/value)
+                        xform
+                        (core/map impl/fresh))]
+    (impl/make-signal {:init-fn init-fn
                        :sources [sig]
-                       :msg-fn msg-fn})))
+                       :msg-xform msg-xform})))
 
 (defn mapseq
   "Takes a mapping function `f` and a sequence of signal `sources`, and returns a
@@ -74,16 +89,19 @@ signal of values obtained by applying `f` to the values from the source signals.
   (if (empty? sources)
     (constant (f))
     (let [sources (vec sources)
-          emit-message (fn [_ messages]
-                         (when (some impl/fresh? messages)
-                           (impl/fresh (apply f (mapv impl/value messages)))))]
+          msg-xform (comp (core/map (fn [[_event _prev msgs]] msgs))
+                          (filter (fn [msgs] (some impl/fresh? msgs)))
+                          (core/map (fn [msgs]
+                                      (->> msgs
+                                           (core/map impl/value)
+                                           (apply f)
+                                           (impl/fresh)))))]
       (impl/make-signal {:init-fn (fn [live-graph opts]
                                     (->> sources
-                                         (mapv #(impl/fresh ((:init-fn %) live-graph opts)))
-                                         (emit-message nil)
-                                         impl/value))
+                                         (core/map (fn [sig] ((:init-fn sig) live-graph opts)))
+                                         (apply f)))
                          :sources sources
-                         :msg-fn emit-message}))))
+                         :msg-xform msg-xform}))))
 
 (defn map
   "Takes a mapping function `f` and any number of signal `sources`, and returns a
@@ -101,6 +119,35 @@ value of each signal in place of the signal itself."
               (zipmap ks values))
             (vals signal-map))))
 
+(defn indexed-updates
+  "Takes a map whose values are signals, to be used as a template. Returns a new
+signal whose values are maps that include an entry for every signal in
+`signal-map` with a fresh value. For example, assuming that `signal-map` is:
+
+    {:a sig-a
+     :b sig-b
+     :c sig-c}
+
+Then when `sig-a` has a fresh value of \"foo\", `sig-b`'s value is cached, and
+`sig-c` has a fresh value of \"bar\", then the `indexed-updates` signal would
+emit `{:a \"foo\" :c \"bar\"}. When none of the signals have fresh values, no
+value is emitted from the `indexed-updates` signal. This means that this signal
+never emits an empty map."
+  [signal-map]
+  (let [ks (keys signal-map)
+        vs (vals signal-map)
+        init-fn (fn [live-graph opts]
+                  (zipmap ks (core/map (fn [s] ((:init-fn s) live-graph opts)) vs)))
+        kv-xform (comp (filter (fn [[k msg]] (impl/fresh? msg)))
+                       (core/map (fn [[k msg]] [k (impl/value msg)])))
+        msg-xform (comp (core/map (fn [[_event _prev msgs]]
+                                    (into {} kv-xform (core/map vector ks msgs))))
+                        (remove empty?)
+                        (core/map impl/fresh))]
+    (impl/make-signal {:init-fn   init-fn
+                       :sources   vs
+                       :msg-xform msg-xform})))
+
 (defn foldp
   "Create a past-dependent signal (\"fold into the past\"). The values of a `foldp`
 signal are obtained by calling `f` with two arguments: the current value of the
@@ -108,41 +155,55 @@ signal are obtained by calling `f` with two arguments: the current value of the
 \"accumulator\"). `init` provides the initial value of the new signal, and
 therefore acts as the seed accumulator."
   [f base source]
-  (impl/make-signal {:init-fn (constantly base)
-                     :sources [source]
-                     :msg-fn (fn [acc [message]]
-                               (when (impl/fresh? message)
-                                 (impl/fresh (f (impl/value message)
-                                                  (impl/value acc)))))}))
+  (impl/make-signal {:init-fn   (constantly base)
+                     :sources   [source]
+                     :msg-xform (comp (filter (fn [[_event _prev [msg]]]
+                                                (impl/fresh? msg)))
+                                      (core/map (fn [[_event prev [msg]]]
+                                                  (impl/fresh (f (impl/value msg) prev)))))}))
 
 (defn drop-repeats
   "Returns a signal which relays values of `sig`, but drops repeated equal values."
   [sig]
-  (impl/make-signal {:init-fn (:init-fn sig)
-                     :sources [sig]
-                     :msg-fn (fn [prev [msg]]
-                               (when (and (impl/fresh? msg)
-                                          (not= (impl/value msg) (impl/value prev)))
-                                 msg))}))
+  (impl/make-signal {:init-fn   (:init-fn sig)
+                     :sources   [sig]
+                     :msg-xform (comp (filter (fn [[_event prev [msg]]]
+                                                (and (impl/fresh? msg)
+                                                     (not= prev (impl/value msg)))))
+                                      (core/map (fn [[_event _prev [msg]]]
+                                                  msg)))}))
 
-(defn reducep
-  "Create a past-dependent signal like `foldp`, with a few differences:
-* calls `f` with the arguments reversed to align with Clojure's `reduce`:
-the first argument is the accumulator, the second is the current value of `source`.
+(defn reductions
+  "Create a past-dependent signal like `foldp`, with two differences:
+* calls `f` with the arguments reversed to align with Clojure: the first
+argument is the accumulator, the second is the current value of `source`.
 * if `init` is omitted, the initial value of the new signal will be obtained by
-calling `f` with no arguments.
-* successive equal values of the returned signal are dropped with `drop-repeats`"
-  ([f source] (reducep f (f) source))
+calling `f` with no arguments."
+  ([f source] (reductions f (f) source))
   ([f init source]
-   (->> source
-        (foldp (fn [val acc] (f acc val)) init)
-        drop-repeats)))
+   (foldp (fn [val prev] (f prev val))
+          init
+          source)))
 
-(defn transducep
-  "Like `reducep`, but transforms the reducing function `f` with transducer `xform`."
-  ([xform f source] (reducep (xform f) (f) source))
-  ([xform f init source]
-   (reducep (xform f) init source)))
+(defn select-step
+  "Takes an initial value and a map whose keys are signals and whose values are
+reducing functions. Returns a past-dependent signal like `reductions`, except
+each signal has its own reducing function to use when that signal updates. If
+more than one source signal updates from the same input event, then each
+applicable reducing function is called to transform the state value in the
+same order as they are defined in `signal-handlers-map`."
+  [init & signals-and-handlers]
+  (let [[signals handlers] (reduce (partial mapv conj)
+                                   [[] []]
+                                   (partition 2 signals-and-handlers))
+        signal->handler (zipmap signals handlers)
+        updates-signal (indexed-updates (zipmap signals signals))
+        f (fn [prev updates-by-signal]
+            (reduce (fn [acc [sig val]]
+                      ((signal->handler sig) acc val))
+                    prev
+                    updates-by-signal))]
+    (reductions f init updates-signal)))
 
 (defn async
   "Returns an \"asynchronous\" version of `source`, splitting off a new subgraph which
@@ -167,8 +228,8 @@ you don't want a slow computation to block the whole graph."
 (defn splice
   "Splice into the signal graph on the level of core.async channels. Takes a
 `setup!` function which is called when the `source` signal gets wired up into
-a live graph. The `setup!` function is passed two arguments: a `to` channel
-and a `from` channel, in that order. The function is expected to be a consumer
+a live graph. The `setup!` function is passed two arguments: a `from` channel
+and a `to` channel, in that order. The function is expected to be a consumer
 of the `from` channel and a producer on the `to` channel, and should close the
 `to` channel when the `from` channel is closed. There are no requirements for
 how many values should be put on the `to` channel or when they should be sent.
@@ -185,7 +246,7 @@ asynchronously produces whichever values are put on the `to` channel in the
                               (let [from (async/tap (impl/signal-mult live-graph source)
                                                     (async/chan 1 impl/fresh-values))
                                     to (async/chan 1 (core/map (partial impl/make-event topic)))]
-                                (setup! to from)
+                                (setup! from to)
                                 to))]
       (impl/make-signal {:init-fn init-fn
                          :deps [source]
@@ -199,10 +260,11 @@ at the same time, the first (leftmost) signal in `sigs` will take precedence and
 the other values will be discarded. The initial value of the returned signal is
 equal to the initial value of the first source signal."
   [sigs]
-  (impl/make-signal {:init-fn (:init-fn (first sigs))
-                     :sources sigs
-                     :msg-fn (fn [prev messages]
-                               (first (filter impl/fresh? messages)))}))
+  (impl/make-signal {:init-fn   (:init-fn (first sigs))
+                     :sources   sigs
+                     :msg-xform (comp (core/map (fn [[_event _prev msgs]]
+                                                  (first (filter impl/fresh? msgs))))
+                                      (remove nil?))}))
 
 (defn merge
   "Takes any number of source signals `sigs`, and returns a new signal which relays
@@ -224,11 +286,12 @@ value of the first source signal."
 fresh value. For example, `(sample-on mouse/clicks mouse/position)` returns a signal
 of click positions."
   [sampler-sig value-sig]
-  (impl/make-signal {:init-fn (:init-fn value-sig)
-                     :sources [sampler-sig value-sig]
-                     :msg-fn (fn [prev [sampler-msg value-msg]]
-                               (when (impl/fresh? sampler-msg)
-                                 (impl/fresh (impl/value value-msg))))}))
+  (impl/make-signal {:init-fn   (:init-fn value-sig)
+                     :sources   [sampler-sig value-sig]
+                     :msg-xform (comp (core/map (fn [[_event _prev [sampler-msg value-msg]]]
+                                                  (when (impl/fresh? sampler-msg)
+                                                    (impl/fresh (impl/value value-msg)))))
+                                      (remove nil?))}))
 
 (defn count
   "Returns a signal whose values are the number of fresh values emitted so far from
@@ -247,6 +310,14 @@ a signal of how many times the `numbers` signal emitted an odd number."
          0
          sig))
 
+(defn- keep-if-msg-xform
+  [pred]
+  (comp (core/map (fn [[_event _prev [msg]]]
+                    (when (and (impl/fresh? msg)
+                               (pred (impl/value msg)))
+                      (impl/fresh (impl/value msg)))))
+        (remove nil?)))
+
 (defn keep-if
   "Returns a signal which relays values from `sig`, but discards any which don't match
 the given predicate function `pred`. If a `base` value is provided, it will be the
@@ -254,22 +325,16 @@ initial value of the returned signal if the initial value of `sig` does not matc
 predicate. If no `base` is provided then the returned signal will always have the
 same initial value as `sig`, even if it does not match the predicate."
   ([pred sig]
-    (impl/make-signal {:init-fn (:init-fn sig)
-                       :sources [sig]
-                       :msg-fn  (fn [_ [msg]]
-                                  (when (and (impl/fresh? msg)
-                                             (pred (impl/value msg)))
-                                    (impl/fresh (impl/value msg))))}))
+    (impl/make-signal {:init-fn   (:init-fn sig)
+                       :sources   [sig]
+                       :msg-xform (keep-if-msg-xform pred)}))
   ([pred base sig]
-    (impl/make-signal {:init-fn (let [init-fn (:init-fn sig)]
-                                  (fn [live-graph opts]
-                                    (let [init (init-fn live-graph opts)]
-                                      (if (pred init) init base))))
-                       :sources [sig]
-                       :msg-fn  (fn [_ [msg]]
-                                  (when (and (impl/fresh? msg)
-                                             (pred (impl/value msg)))
-                                    (impl/fresh (impl/value msg))))})))
+    (impl/make-signal {:init-fn   (let [init-fn (:init-fn sig)]
+                                    (fn [live-graph opts]
+                                      (let [init (init-fn live-graph opts)]
+                                        (if (pred init) init base))))
+                       :sources   [sig]
+                       :msg-xform (keep-if-msg-xform pred)})))
 
 (defn drop-if
   "Like `keep-if`, but drops values which match the predicate."
@@ -344,3 +409,9 @@ with a sequence of keys `ks`, then fresh values will be inserted into the atom's
                          :meta {::source live-graph}))))
   ([x atm] (impl/pipe-to-atom* x atm nil))
   ([x atm ks] (impl/pipe-to-atom* x atm ks)))
+
+(defn to-chan
+  "Takes a signal `s` and returns a channel of fresh values, passing any extra `args` to
+the `chan` constructor."
+  [s & args]
+  (-> (spawn s) (async/tap (apply async/chan args))))

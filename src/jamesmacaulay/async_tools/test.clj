@@ -1,9 +1,8 @@
 (ns jamesmacaulay.async-tools.test
   (:require [jamesmacaulay.async-tools.core :as tools]
             [cemerick.cljs.test]
-            #+clj [clojure.test]))
+            [clojure.test]))
 
-#+clj
 (defmacro deftest-async
   [name & body]
   (let [deftest-sym (if (:ns &env)

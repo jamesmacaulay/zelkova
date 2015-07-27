@@ -1,29 +1,24 @@
 (ns jamesmacaulay.zelkova.impl.signal
   "Implementation details for `jamesmacaulay.zelkova.signal`."
-  #+clj
-  (:require [jamesmacaulay.async-tools.core :as tools]
-            [jamesmacaulay.zelkova.impl.time :as time]
-            [clojure.zip :as zip]
-            [clojure.set]
-            [alandipert.kahn :as kahn]
-            [clojure.core.async :as async :refer [go go-loop <! >!]]
-            [clojure.core.async.impl.protocols :as async-impl])
-  #+cljs
-  (:require [jamesmacaulay.async-tools.core :as tools]
-            [jamesmacaulay.zelkova.impl.time :as time]
-            [clojure.zip :as zip]
-            [clojure.set]
-            [alandipert.kahn :as kahn]
-            [cljs.core.async :as async :refer [<! >!]]
-            [cljs.core.async.impl.protocols :as async-impl])
-  #+cljs
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
+  #?(:cljs (:require [jamesmacaulay.async-tools.core :as tools]
+                     [jamesmacaulay.zelkova.impl.time :as time]
+                     [clojure.zip :as zip]
+                     [clojure.set]
+                     [alandipert.kahn :as kahn]
+                     [cljs.core.async :as async :refer [<! >!]]
+                     [cljs.core.async.impl.protocols :as async-impl])
+
+     :clj (:require [jamesmacaulay.async-tools.core :as tools]
+                    [jamesmacaulay.zelkova.impl.time :as time]
+                    [clojure.zip :as zip]
+                    [clojure.set]
+                    [alandipert.kahn :as kahn]
+                    [clojure.core.async :as async :refer [go go-loop <! >!]]
+                    [clojure.core.async.impl.protocols :as async-impl]))
+  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
 
 (defprotocol BoxedValueProtocol
   (value [boxed]))
-
-(defprotocol HasOriginEvent
-  (origin-event [x]))
 
 (defprotocol EventProtocol
   "Events come in from \"the outside world\" and get transformed into Messages by input signal nodes"
@@ -33,16 +28,13 @@
 
 (defprotocol MessageProtocol
   "Messages are propagated through the signal graph, and can either be \"fresh\" or \"cached\"."
-  (fresh? [msg] "returns `true` if the message represents a fresh value, `false` otherwise")
-  (record-origin-event [msg e]))
+  (fresh? [msg] "returns `true` if the message represents a fresh value, `false` otherwise"))
 
 ; an external event
 (defrecord Event
   [topic value timestamp]
   BoxedValueProtocol
   (value [_] value)
-  HasOriginEvent
-  (origin-event [e] e)
   EventProtocol
   (topic [_] topic)
   (timestamp [_] timestamp)
@@ -54,33 +46,27 @@
 
 ; a message representing a "fresh" signal value
 (defrecord Fresh
-  [value origin-event]
+  [value]
   BoxedValueProtocol
   (value [_] value)
-  HasOriginEvent
-  (origin-event [_] origin-event)
   MessageProtocol
-  (fresh? [_] true)
-  (record-origin-event [m e] (assoc m :origin-event e)))
+  (fresh? [_] true))
 
 ; a message representing a "cached" signal value
 (defrecord Cached
-  [value origin-event]
+  [value]
   BoxedValueProtocol
   (value [_] value)
-  HasOriginEvent
-  (origin-event [_] origin-event)
   MessageProtocol
-  (fresh? [_] false)
-  (record-origin-event [m e] (assoc m :origin-event e)))
+  (fresh? [_] false))
 
 (defn fresh
-  ([value] (->Fresh value nil))
-  ([value event] (->Fresh value event)))
+  [value]
+  (->Fresh value))
 
 (defn cached
-  ([value] (->Cached value nil))
-  ([value event] (->Cached value event)))
+  [value]
+  (->Cached value))
 
 (def ^{:doc "A transducer which takes in batches of signal graph messages and pipes out fresh values."}
   fresh-values
@@ -95,7 +81,9 @@
   (signal-deps [s] "returns the set of \"parent\" signals on which this signal depends")
   (parents-map [s])
   (kids-map [s])
-  (topsort [s]))
+  (topsort [s])
+  (inputs-by-topic [s])
+  (kid-indexes-map [s]))
 
 (defn signal?
   "returns `true` if the argument satisfies `SignalProtocol`, `false` otherwise"
@@ -151,21 +139,52 @@
   [pm]
   (->> pm (kahn/kahn-sort) (reverse) (into [])))
 
+(defn topsort->topic-map
+  [sorted-sigs]
+  (reduce (fn [m sig]
+            (if-let [topic (:relayed-event-topic sig)]
+              (assoc m topic (conj (get m topic []) sig))
+              m))
+          {}
+          sorted-sigs))
+
+(defn build-kid-indexes-map
+  [kids-map sorted-sigs]
+  (let [signal->index (zipmap sorted-sigs (range))
+        signals->sorted-index-set #(into (sorted-set) (map signal->index) %)]
+    (zipmap (keys kids-map)
+            (map signals->sorted-index-set (vals kids-map)))))
+
 (defrecord SignalDefinitionMetadata
-  [parents-map kids-map topsort])
+  [parents-map kids-map topsort kid-indexes-map inputs-by-topic])
 
 (defn- attach-delayed-metadata
   [sig]
   (let [delayed-dep-maps (delay (calculate-dependency-maps sig))
         delayed-parents-map (delay (:parents-map @delayed-dep-maps))
         delayed-kids-map (delay (:kids-map @delayed-dep-maps))
-        delayed-topsort (delay (parents-map->topsort @delayed-parents-map))]
+        delayed-topsort (delay (parents-map->topsort @delayed-parents-map))
+        delayed-topic-map (delay (topsort->topic-map @delayed-topsort))
+        delayed-kid-indexes-map (delay (build-kid-indexes-map @delayed-kids-map @delayed-topsort))]
     (with-meta sig (->SignalDefinitionMetadata delayed-parents-map
                                                delayed-kids-map
-                                               delayed-topsort))))
+                                               delayed-topsort
+                                               delayed-kid-indexes-map
+                                               delayed-topic-map))))
+
+(defn- delegate-to-channel
+  [f ch & args]
+  (assert (not (nil? ch))
+          "This signal is not a valid write-port, use the `jamesmacaulay.zelkova.signal/write-port` constructor if you want to treat this signal like a channel.")
+  (apply f ch args))
 
 (defrecord SignalDefinition
-  [init-fn sources relayed-event-topic msg-fn deps event-sources]
+  [init-fn sources relayed-event-topic msg-xform deps event-sources write-port-channel]
+  async-impl/WritePort
+  (put! [_ val fn1-handler] (delegate-to-channel async-impl/put! write-port-channel val fn1-handler))
+  async-impl/Channel
+  (close! [_] (delegate-to-channel async-impl/close! write-port-channel))
+  (closed? [_] (delegate-to-channel async-impl/closed? write-port-channel))
   SignalProtocol
   (input? [_] (some #{:events} sources))
   (signal-deps [_]
@@ -174,7 +193,9 @@
           (or deps sources)))
   (parents-map [s] (-> s meta :parents-map deref))
   (kids-map [s] (-> s meta :kids-map deref))
-  (topsort [s] (-> s meta :topsort deref)))
+  (topsort [s] (-> s meta :topsort deref))
+  (inputs-by-topic [s] (-> s meta :inputs-by-topic deref))
+  (kid-indexes-map [s] (-> s meta :kid-indexes-map deref)))
 
 (defn- setup-event-relay
   "Takes a topic, and returns an input signal which relays matching events as messages to its children"
@@ -182,9 +203,10 @@
   (if-let [relayed-topic (:relayed-event-topic opts)]
     (assoc opts
       :sources [:events]
-      :msg-fn (fn [prev [event]]
-                (when (= relayed-topic (topic event))
-                  (fresh (value event)))))
+      :msg-xform (comp (map (fn [[event _prev _msgs]]
+                              (when (= relayed-topic (topic event))
+                                (fresh (value event)))))
+                       (remove nil?)))
     opts))
 
 (defn make-signal
@@ -224,7 +246,7 @@
   [msg-batches]
   (apply map vector msg-batches))
 
-(defn- wrap-msg-fn
+(defn- wrap-msg-xform
   "Takes a signal's `msg-fn` and wraps it to provide various behaviours:
     * return values are turned into sequences with `ensure-sequential`
     * message batches from each signal are padded and transposed, and `msg-fn` is called
@@ -232,19 +254,20 @@
       of a separate event.
     * when `msg-fn` returns `nil` or an empty sequence, the previous value is returned as a
       cached value."
-  [msg-fn]
-  (let [msg-fn (comp ensure-sequential msg-fn)]
-    (fn [prev msg-batches]
-      (let [event (-> msg-batches ffirst origin-event)
-            input-series (-> msg-batches pad transpose)
-            output-series (->> input-series
-                               (reductions msg-fn prev)
-                               (into [] (comp (drop 1)
-                                              cat
-                                              (map #(record-origin-event % event)))))]
-        (if (empty? output-series)
-          [(cached (value prev) event)]
-          output-series)))))
+  [msg-xform]
+  (let [msg-fn (fn [args] (sequence msg-xform [args]))]
+    (fn [prev event-and-msg-batches]
+      (let [input-series (-> event-and-msg-batches pad transpose)
+            output-series (reduce (fn [acc [event & msgs]]
+                                    (let [prev (value (peek acc))
+                                          msgs (vec msgs)
+                                          new-msgs (msg-fn [event prev msgs])]
+                                      (into acc new-msgs)))
+                                  [(cached prev)]
+                                  input-series)]
+        (if (= 1 (count output-series))
+          output-series
+          (subvec output-series 1))))))
 
 ; wiring up channels:
 
@@ -256,25 +279,26 @@
 (defn- tap-signals
   [mult-map sources]
   (->> sources
-       (mapv (partial tap-signal mult-map))
+       (into [(tap-signal mult-map :events)]
+             (map (partial tap-signal mult-map)))
        (async/map vector)))
 
 (defn- spawn-message-loop!
-  [init msg-fn c-in c-out]
-  (let [wrapped-msg-fn (wrap-msg-fn msg-fn)]
-    (go-loop [prev (fresh init)]
+  [init msg-xform c-in c-out]
+  (let [wrapped-msg-fn (wrap-msg-xform msg-xform)]
+    (go-loop [prev init]
       (let [in-val (async/<! c-in)]
         (if (nil? in-val)
           (async/close! c-out)
           (let [out-val (wrapped-msg-fn prev in-val)]
             (>! c-out out-val)
-            (recur (last out-val))))))))
+            (recur (value (last out-val)))))))))
 
 (defn- build-message-mult
-  [mult-map {:keys [init-fn sources msg-fn]} live-graph opts]
+  [mult-map {:keys [init-fn sources msg-xform]} live-graph opts]
   (let [c-in (tap-signals mult-map sources)
         c-out (async/chan)]
-    (spawn-message-loop! (init-fn live-graph opts) msg-fn c-in c-out)
+    (spawn-message-loop! (init-fn live-graph opts) msg-xform c-in c-out)
     (async/mult c-out)))
 
 (defn build-message-mult-map
@@ -290,15 +314,13 @@
   (into {} (map :event-sources) sorted-signals))
 
 (defprotocol LiveChannelGraphProtocol
-  (output-mult [g])
   (signal-mult [g sig])
   (connect-to-world [g])
   (init [g]))
 
 (defrecord LiveChannelGraph
-  [definition events-channel mult-map opts]
+  [definition events-channel mult-map output-values-mult opts]
   LiveChannelGraphProtocol
-  (output-mult [_] (get mult-map definition))
   (signal-mult [_ sig] (get mult-map sig))
   (connect-to-world [g]
     (let [world (gather-event-sources (topsort definition))]
@@ -313,9 +335,9 @@
   async-impl/WritePort
   (put! [_ val fn1] (async-impl/put! events-channel val fn1))
   async/Mult
-  (tap* [g ch close?] (async/tap* (output-mult g) ch close?))
-  (untap* [g ch] (async/untap* (output-mult g) ch))
-  (untap-all* [g] (async/untap-all* (output-mult g))))
+  (tap* [g ch close?] (async/tap* output-values-mult ch close?))
+  (untap* [g ch] (async/untap* output-values-mult ch))
+  (untap-all* [g] (async/untap-all* output-values-mult)))
 
 (defprotocol SignalLike
   (spawn* [x opts])
@@ -324,8 +346,16 @@
 (def ^:private events-xform
   (map (comp (partial map
                       (fn [event]
-                        (record-timestamp event (time/now))))
+                        (if (nil? (timestamp event))
+                          (record-timestamp event (time/now))
+                          event)))
              ensure-sequential)))
+
+(defn- build-output-values-mult
+  [mult-map output-sig]
+  (-> (get mult-map output-sig)
+      (async/tap (async/chan 1 fresh-values))
+      (async/mult)))
 
 (extend-protocol SignalLike
   LiveChannelGraph
@@ -334,15 +364,16 @@
     (tools/do-effects (if (seq ks)
                         (partial swap! atm assoc-in ks)
                         (partial reset! atm))
-                      (async/tap g (async/chan 1 fresh-values)))
+                      (async/tap g (async/chan)))
     atm)
   SignalDefinition
   (spawn* [s opts]
     (let [events-channel (async/chan 1 events-xform)
           events-mult (async/mult events-channel)
-          mult-map (build-message-mult-map (topsort s) events-mult s opts)]
+          mult-map (build-message-mult-map (topsort s) events-mult s opts)
+          output-values-mult (build-output-values-mult mult-map s)]
       (-> s
-          (->LiveChannelGraph events-channel mult-map opts)
+          (->LiveChannelGraph events-channel mult-map output-values-mult opts)
           (connect-to-world))))
   (pipe-to-atom* [s atm ks]
     (pipe-to-atom* (spawn* s nil) atm ks)))
