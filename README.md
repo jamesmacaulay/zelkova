@@ -38,6 +38,10 @@ Here's a [mailing list on Google Groups](https://groups.google.com/d/forum/zelko
   (z/pipe-to-atom saved-points-signal))
 ```
 
+## Documentation
+
+[The docs](http://jamesmacaulay.github.io/zelkova/doc/api/index.html).
+
 ## Examples
 
 * [Quil Flyer](http://jamesmacaulay.github.io/zelkova-quil-flyer/resources/public/index.html) ([source](https://github.com/jamesmacaulay/zelkova-quil-flyer))
